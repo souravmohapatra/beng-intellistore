@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2320" height="1490" viewBox="0 0 2320 1490">
+<rect width="2320" height="1490" fill="white"/>
+<text x="80" y="85.0" font-family="Arial, sans-serif" font-size="40" fill="#203047">Beng Document Intelligence</text>
+<text x="80" y="123.0" font-family="Arial, sans-serif" font-size="22" fill="#62738a">HIGH-LEVEL ARCHITECTURE  /  Three hosts, distinct responsibilities</text>
+<rect x="80" y="165" width="330" height="120" rx="14" fill="#ffffff" stroke="#1971c2" stroke-width="2"/>
+<text x="102" y="205.0" font-family="Arial, sans-serif" font-size="22" fill="#1971c2">Sourav + Swati</text>
+<text x="102" y="243.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Submit, browse, review</text>
+<rect x="450" y="165" width="370" height="120" rx="14" fill="#ffffff" stroke="#1971c2" stroke-width="2"/>
+<text x="472" y="205.0" font-family="Arial, sans-serif" font-size="22" fill="#1971c2">Document sources</text>
+<text x="472" y="243.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Photos, scans, PDFs, email</text>
+<text x="930" y="194.0" font-family="Arial, sans-serif" font-size="19" fill="#1971c2">DEFAULT PATH</text>
+<text x="930" y="233.0" font-family="Arial, sans-serif" font-size="22" fill="#203047">Structured filters + text search</text>
+<text x="930" y="261.6" font-family="Arial, sans-serif" font-size="22" fill="#203047">mini PC + NAS; laptop can be offline</text>
+<text x="1640" y="194.0" font-family="Arial, sans-serif" font-size="19" fill="#7048b8">EXPLICIT ESCALATION</text>
+<text x="1640" y="233.0" font-family="Arial, sans-serif" font-size="22" fill="#203047">Deep search runs on the laptop</text>
+<text x="1640" y="261.6" font-family="Arial, sans-serif" font-size="22" fill="#203047">Results include source evidence</text>
+<rect x="80" y="385" width="560" height="770" rx="14" fill="#edf5ff" stroke="#1971c2" stroke-width="2"/>
+<rect x="880" y="385" width="560" height="770" rx="14" fill="#ebf8f5" stroke="#087f8c" stroke-width="2"/>
+<rect x="1680" y="385" width="560" height="770" rx="14" fill="#f4effc" stroke="#7048b8" stroke-width="2"/>
+<text x="106" y="441.0" font-family="Arial, sans-serif" font-size="32" fill="#1971c2">beng-mini-pc</text>
+<text x="106" y="475.0" font-family="Arial, sans-serif" font-size="18" fill="#1971c2">CONTROL + SERVING  /  always available</text>
+<text x="906" y="441.0" font-family="Arial, sans-serif" font-size="32" fill="#087f8c">beng-nas SSD</text>
+<text x="906" y="475.0" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">DURABLE DATA  /  persistent source of truth</text>
+<text x="1706" y="441.0" font-family="Arial, sans-serif" font-size="32" fill="#7048b8">beng-laptop</text>
+<text x="1706" y="475.0" font-family="Arial, sans-serif" font-size="18" fill="#7048b8">INTELLIGENCE  /  batch + on demand</text>
+<rect x="105" y="510" width="510" height="170" rx="14" fill="#ffffff" stroke="#1971c2" stroke-width="2"/>
+<text x="127" y="550.0" font-family="Arial, sans-serif" font-size="22" fill="#1971c2">Intake + document status</text>
+<text x="127" y="588.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Validate submissions; capture context</text>
+<text x="127" y="611.4" font-family="Arial, sans-serif" font-size="18" fill="#203047">Preserve originals before enrichment</text>
+<text x="127" y="634.8" font-family="Arial, sans-serif" font-size="18" fill="#203047">Expose lifecycle and processing issues</text>
+<rect x="105" y="710" width="510" height="180" rx="14" fill="#ffffff" stroke="#1971c2" stroke-width="2"/>
+<text x="127" y="750.0" font-family="Arial, sans-serif" font-size="22" fill="#1971c2">Browse + deterministic retrieval</text>
+<text x="127" y="788.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Filters, keyword, exact / pattern match</text>
+<text x="127" y="811.4" font-family="Arial, sans-serif" font-size="18" fill="#203047">Serve previews and links to originals</text>
+<text x="127" y="834.8" font-family="Arial, sans-serif" font-size="18" fill="#203047">Review / correct fields with provenance</text>
+<rect x="105" y="920" width="510" height="165" rx="14" fill="#ffffff" stroke="#1971c2" stroke-width="2"/>
+<text x="127" y="960.0" font-family="Arial, sans-serif" font-size="22" fill="#1971c2">Work coordination</text>
+<text x="127" y="998.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Coordinate processing / reprocessing</text>
+<text x="127" y="1021.4" font-family="Arial, sans-serif" font-size="18" fill="#203047">Dispatch explicit deep-search intent</text>
+<text x="127" y="1044.8" font-family="Arial, sans-serif" font-size="18" fill="#203047">Present results with supporting evidence</text>
+<text x="108" y="1122.0" font-family="Arial, sans-serif" font-size="18" fill="#1971c2">Heavy analysis and model inference: laptop</text>
+<rect x="905" y="510" width="510" height="150" rx="14" fill="#ffffff" stroke="#087f8c" stroke-width="2"/>
+<text x="927" y="550.0" font-family="Arial, sans-serif" font-size="22" fill="#087f8c">Preserved originals + records</text>
+<text x="927" y="588.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Immutable / version-preserved sources</text>
+<text x="927" y="611.4" font-family="Arial, sans-serif" font-size="18" fill="#203047">Document IDs, context, relationships</text>
+<rect x="905" y="685" width="510" height="150" rx="14" fill="#ffffff" stroke="#087f8c" stroke-width="2"/>
+<text x="927" y="725.0" font-family="Arial, sans-serif" font-size="22" fill="#087f8c">Work + lifecycle state</text>
+<text x="927" y="763.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Pending work, history, outcomes</text>
+<text x="927" y="786.4" font-family="Arial, sans-serif" font-size="18" fill="#203047">Partial results, uncertainty, review</text>
+<rect x="905" y="860" width="510" height="225" rx="14" fill="#ffffff" stroke="#087f8c" stroke-width="2"/>
+<text x="927" y="900.0" font-family="Arial, sans-serif" font-size="22" fill="#087f8c">Query-ready document knowledge</text>
+<text x="927" y="938.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Text, common + type-specific fields</text>
+<text x="927" y="961.4" font-family="Arial, sans-serif" font-size="18" fill="#203047">Classes, entities, summaries, previews</text>
+<text x="927" y="984.8" font-family="Arial, sans-serif" font-size="18" fill="#203047">Search indexes or durable source data</text>
+<text x="927" y="1008.2" font-family="Arial, sans-serif" font-size="18" fill="#203047">Optional semantic artifacts / segments</text>
+<text x="927" y="1031.6" font-family="Arial, sans-serif" font-size="18" fill="#203047">Provenance + user-confirmed corrections</text>
+<text x="908" y="1122.0" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">Retains data independently of compute nodes</text>
+<rect x="1705" y="510" width="510" height="180" rx="14" fill="#ffffff" stroke="#7048b8" stroke-width="2"/>
+<text x="1727" y="550.0" font-family="Arial, sans-serif" font-size="22" fill="#7048b8">Batch enrichment + reprocessing</text>
+<text x="1727" y="588.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Read queued originals and source context</text>
+<text x="1727" y="611.4" font-family="Arial, sans-serif" font-size="18" fill="#203047">OCR / text extraction; classify documents</text>
+<text x="1727" y="634.8" font-family="Arial, sans-serif" font-size="18" fill="#203047">Extract fields, entities and summaries</text>
+<rect x="1705" y="720" width="510" height="170" rx="14" fill="#ffffff" stroke="#7048b8" stroke-width="2"/>
+<text x="1727" y="760.0" font-family="Arial, sans-serif" font-size="22" fill="#7048b8">Prepare durable search artifacts</text>
+<text x="1727" y="798.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Build search / semantic representations</text>
+<text x="1727" y="821.4" font-family="Arial, sans-serif" font-size="18" fill="#203047">Write prepared knowledge + provenance</text>
+<text x="1727" y="844.8" font-family="Arial, sans-serif" font-size="18" fill="#203047">Record outcomes, issues, uncertainties</text>
+<rect x="1705" y="920" width="510" height="165" rx="14" fill="#ffffff" stroke="#7048b8" stroke-width="2"/>
+<text x="1727" y="960.0" font-family="Arial, sans-serif" font-size="22" fill="#7048b8">Deep search</text>
+<text x="1727" y="998.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Semantic retrieval + reasoning</text>
+<text x="1727" y="1021.4" font-family="Arial, sans-serif" font-size="18" fill="#203047">Use processed document knowledge</text>
+<text x="1727" y="1044.8" font-family="Arial, sans-serif" font-size="18" fill="#203047">Return evidence-linked interpretations</text>
+<text x="1708" y="1122.0" font-family="Arial, sans-serif" font-size="18" fill="#7048b8">Normal retrieval works with laptop offline</text>
+<polyline points="245,295 245,375" fill="none" stroke="#1971c2" stroke-width="2"  stroke-linejoin="round"/>
+<polyline points="239.78041359066523,364.1946347717679 245,375 250.21958640933477,364.1946347717679" fill="none" stroke="#1971c2" stroke-width="2"/>
+<polyline points="250.21958640933477,305.8053652282321 245,295 239.78041359066523,305.8053652282321" fill="none" stroke="#1971c2" stroke-width="2"/>
+<text x="83" y="333.0" font-family="Arial, sans-serif" font-size="18" fill="#1971c2">Requests +</text>
+<text x="83" y="356.4" font-family="Arial, sans-serif" font-size="18" fill="#1971c2">results</text>
+<polyline points="635,295 635,335 540,335 540,375" fill="none" stroke="#1971c2" stroke-width="2"  stroke-linejoin="round"/>
+<polyline points="534.7804135906653,364.1946347717679 540,375 545.2195864093347,364.1946347717679" fill="none" stroke="#1971c2" stroke-width="2"/>
+<polyline points="650,570 870,570" fill="none" stroke="#087f8c" stroke-width="2"  stroke-linejoin="round"/>
+<polyline points="859.1946347717678,575.2195864093347 870,570 859.1946347717678,564.7804135906653" fill="none" stroke="#087f8c" stroke-width="2"/>
+<text x="665" y="528.0" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">Persist originals</text>
+<text x="665" y="551.4" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">+ intake context</text>
+<polyline points="650,785 870,785" fill="none" stroke="#087f8c" stroke-width="2"  stroke-linejoin="round"/>
+<polyline points="859.1946347717678,790.2195864093347 870,785 859.1946347717678,779.7804135906653" fill="none" stroke="#087f8c" stroke-width="2"/>
+<polyline points="660.8053652282322,779.7804135906653 650,785 660.8053652282322,790.2195864093347" fill="none" stroke="#087f8c" stroke-width="2"/>
+<text x="665" y="717.0" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">Normal queries /</text>
+<text x="665" y="740.4" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">prepared results,</text>
+<text x="665" y="763.8" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">previews, originals</text>
+<polyline points="650,1020 870,1020" fill="none" stroke="#087f8c" stroke-width="2"  stroke-linejoin="round"/>
+<polyline points="859.1946347717678,1025.2195864093349 870,1020 859.1946347717678,1014.7804135906653" fill="none" stroke="#087f8c" stroke-width="2"/>
+<polyline points="660.8053652282322,1014.7804135906653 650,1020 660.8053652282322,1025.2195864093349" fill="none" stroke="#087f8c" stroke-width="2"/>
+<text x="665" y="952.0" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">Track work state;</text>
+<text x="665" y="975.4" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">read / save user</text>
+<text x="665" y="998.8" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">corrections</text>
+<polyline points="1450,570 1670,570" fill="none" stroke="#087f8c" stroke-width="2"  stroke-linejoin="round"/>
+<polyline points="1659.1946347717678,575.2195864093347 1670,570 1659.1946347717678,564.7804135906653" fill="none" stroke="#087f8c" stroke-width="2"/>
+<text x="1465" y="528.0" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">Read originals</text>
+<text x="1465" y="551.4" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">+ pending work</text>
+<polyline points="1670,785 1450,785" fill="none" stroke="#087f8c" stroke-width="2"  stroke-linejoin="round"/>
+<polyline points="1460.8053652282322,779.7804135906653 1450,785 1460.8053652282322,790.2195864093347" fill="none" stroke="#087f8c" stroke-width="2"/>
+<text x="1465" y="717.0" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">Write enriched</text>
+<text x="1465" y="740.4" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">knowledge +</text>
+<text x="1465" y="763.8" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">processing state</text>
+<polyline points="1450,1020 1670,1020" fill="none" stroke="#087f8c" stroke-width="2"  stroke-linejoin="round"/>
+<polyline points="1659.1946347717678,1025.2195864093349 1670,1020 1659.1946347717678,1014.7804135906653" fill="none" stroke="#087f8c" stroke-width="2"/>
+<text x="1465" y="952.0" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">Read processed</text>
+<text x="1465" y="975.4" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">knowledge for</text>
+<text x="1465" y="998.8" font-family="Arial, sans-serif" font-size="18" fill="#087f8c">deep search</text>
+<polyline points="360,1165 360,1240 1850,1240 1850,1165" fill="none" stroke="#7048b8" stroke-width="2" stroke-dasharray="10 7" stroke-linejoin="round"/>
+<polyline points="1855.2195864093349,1175.8053652282322 1850,1165 1844.7804135906651,1175.8053652282322" fill="none" stroke="#7048b8" stroke-width="2"/>
+<text x="690" y="1219.0" font-family="Arial, sans-serif" font-size="21" fill="#7048b8">Coordinate processing / reprocessing  |  Explicit deep-search request</text>
+<polyline points="2070,1165 2070,1340 180,1340 180,1165" fill="none" stroke="#7048b8" stroke-width="2" stroke-dasharray="10 7" stroke-linejoin="round"/>
+<polyline points="185.21958640933477,1175.8053652282322 180,1165 174.78041359066523,1175.8053652282322" fill="none" stroke="#7048b8" stroke-width="2"/>
+<text x="810" y="1317.0" font-family="Arial, sans-serif" font-size="21" fill="#7048b8">Deep-search results + supporting evidence</text>
+<polyline points="80,1430 145,1430" fill="none" stroke="#087f8c" stroke-width="2"  stroke-linejoin="round"/>
+<polyline points="134.19463477176788,1435.2195864093349 145,1430 134.19463477176788,1424.7804135906651" fill="none" stroke="#087f8c" stroke-width="2"/>
+<text x="163" y="1435.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Data exchange</text>
+<polyline points="420,1430 485,1430" fill="none" stroke="#7048b8" stroke-width="2" stroke-dasharray="10 7" stroke-linejoin="round"/>
+<polyline points="474.1946347717679,1435.2195864093349 485,1430 474.1946347717679,1424.7804135906651" fill="none" stroke="#7048b8" stroke-width="2"/>
+<text x="503" y="1435.0" font-family="Arial, sans-serif" font-size="18" fill="#203047">Coordination / deep-search response</text>
+<text x="1100" y="1417.0" font-family="Arial, sans-serif" font-size="18" fill="#62738a">Logical responsibilities within host boundaries; cards are not separate services.</text>
+<text x="1100" y="1440.4" font-family="Arial, sans-serif" font-size="18" fill="#62738a">Source: HLD v0.1, sections 7-10, 13, 17. Interfaces and technologies remain unspecified.</text>
+</svg>
