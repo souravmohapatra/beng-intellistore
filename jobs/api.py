@@ -25,7 +25,7 @@ from ledger.models import Upload
 MAX_BODY_BYTES = 1024 * 1024
 CLAIM_LOCK_KEY = 0x1A2B3C
 RESULT_VERSION = 1
-ALLOWED_OUTCOMES = {"unsupported", "failed", "imported"}
+ALLOWED_OUTCOMES = {"unsupported", "failed", "imported"}  # partial is server-derived only
 MAX_STAGE_LENGTH = 100
 MAX_MESSAGE_LENGTH = 500
 
@@ -67,11 +67,17 @@ def _json_body(request) -> dict:
     return body
 
 
-def _effective_outcome(outcome: str, upload_status: str) -> str:
+def _effective_outcome(outcome: str, publication) -> str:
     """Record what publication achieved, not what the worker claimed."""
-    if outcome == "imported" and upload_status != Upload.Status.IMPORTED:
+    if outcome != "imported":
+        return outcome
+    if publication.rejected:
         return "failed"
-    return outcome
+    if publication.deferred:
+        return "partial"
+    if publication.status != Upload.Status.IMPORTED:
+        return "failed"
+    return "imported"
 
 
 def _error(exc: ApiError) -> JsonResponse:
@@ -233,8 +239,9 @@ def result(request, job_id):
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
-        upload_status = apply_result(job, body)
-        effective_outcome = _effective_outcome(outcome, upload_status)
+        publication = apply_result(job, body)
+        upload_status = publication.status
+        effective_outcome = _effective_outcome(outcome, publication)
         JobResult.objects.create(
             attempt=attempt,
             version=RESULT_VERSION,

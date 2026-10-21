@@ -4,6 +4,7 @@ The worker is untrusted input: every monetary fact is re-checked here, sections
 commit independently, and an unvalidated section contributes no financial facts.
 """
 
+from dataclasses import dataclass
 from datetime import date
 
 from ledger.models import BalanceObservation, Transaction, Upload
@@ -12,6 +13,7 @@ SECTION_ACCOUNT_KINDS = {
     "lloyds_current": "current",
     "lloyds_credit": "card",
     "amex": "card",
+    "revolut_personal_gbp": "current",
 }
 MAX_TRANSACTIONS_PER_SECTION = 5000
 MAX_AMOUNT_PENCE = 10**12
@@ -32,8 +34,8 @@ def validate_result_payload(body: dict) -> None:
         for section in sections:
             if not isinstance(section, dict) or not isinstance(section.get("name"), str):
                 raise ValueError("each section needs a name")
-            if section.get("status") not in {"ok", "failed"}:
-                raise ValueError("section status must be ok or failed")
+            if section.get("status") not in {"ok", "failed", "ignored", "deferred"}:
+                raise ValueError("section status is not supported")
             for key in ("transactions", "balances", "issues"):
                 if not isinstance(section.get(key, []), list):
                     raise ValueError(f"section {key} must be a list")
@@ -50,21 +52,43 @@ def validate_result_payload(body: dict) -> None:
         raise ValueError("issues must be a list")
 
 
-def apply_result(job, body: dict) -> str:
+@dataclass(frozen=True)
+class PublicationOutcome:
+    status: str
+    committed: int
+    rejected: int
+    deferred: int
+
+
+def apply_result(job, body: dict) -> PublicationOutcome:
     """Commit a validated result and return the new upload status."""
     outcome = body["outcome"]
     upload = job.upload
 
     if outcome == "unsupported":
-        return Upload.Status.UNSUPPORTED
+        return PublicationOutcome(Upload.Status.UNSUPPORTED, 0, 0, 0)
     if outcome == "failed":
-        return Upload.Status.NEEDS_REVIEW
+        return PublicationOutcome(Upload.Status.NEEDS_REVIEW, 0, 0, 0)
 
     committed = 0
     rejected = 0
+    deferred = 0
     server_issues = body.setdefault("server_issues", [])
 
     for section in body["sections"]:
+        status = section.get("status")
+        if status == "ignored":
+            continue
+        if status == "deferred":
+            deferred += 1
+            server_issues.append(
+                {
+                    "section": section["name"],
+                    "code": "section_deferred",
+                    "message": "This section is not implemented yet and was not imported.",
+                }
+            )
+            continue
         try:
             publish_section(upload, section)
             committed += 1
@@ -74,9 +98,12 @@ def apply_result(job, body: dict) -> str:
                 {"section": section["name"], "code": exc.code, "message": exc.message}
             )
 
-    if committed and not rejected:
-        return Upload.Status.IMPORTED
-    return Upload.Status.NEEDS_REVIEW
+    status = (
+        Upload.Status.IMPORTED
+        if committed and not rejected and not deferred
+        else Upload.Status.NEEDS_REVIEW
+    )
+    return PublicationOutcome(status, committed, rejected, deferred)
 
 
 def publish_section(upload, section: dict) -> None:

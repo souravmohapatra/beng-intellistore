@@ -252,10 +252,9 @@ def positioned_statement_pdf(pages: list[list[tuple[float, float, str]]]) -> byt
             + str(4 + 2 * index).encode()
             + b" 0 R >>"
         )
-        commands = ["BT /F1 9 Tf"]
+        commands = []
         for x, y, text in tokens:
-            commands.append(f"1 0 0 1 {x} {y} Tm ({_escape(text)}) Tj")
-        commands.append("ET")
+            commands.append(f"BT /F1 9 Tf 1 0 0 1 {x} {y} Tm ({_escape(text)}) Tj ET")
         stream = "\n".join(commands).encode("latin-1")
         objects.append(
             b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream"
@@ -379,3 +378,104 @@ def extract_positioned_token_pages(data: bytes) -> list[list[tuple[float, float,
 
 def extract_positioned_tokens(data: bytes) -> list[tuple[float, float, str]]:
     return [token for page in extract_positioned_token_pages(data) for token in page]
+
+
+def _revolut_row(y, date_text, description, category, money, balance,
+                 tax="£0.00", other="£0.00", fees="£0.00"):
+    return [
+        (40, y, date_text),
+        (125, y, description),
+        (257, y, category),
+        (342, y, money),
+        (385, y, balance),
+        (428, y, tax),
+        (471, y, other),
+        (533, y, fees),
+    ]
+
+
+def revolut_pages(include_savings: bool = True) -> list[list[tuple[float, float, str]]]:
+    """Consolidated-shaped pages: personal GBP plus excluded sections."""
+    personal_summary = [
+        (40, 688, "Current Accounts Summaries"),
+        (40, 650, "Personal Account (GBP)"),
+        (40, 614, "Deposit value"),
+        (40, 596, "Opening balance"),
+        (120, 596, "£500.00"),
+        (40, 578, "Closing balance"),
+        (120, 578, "£475.00"),
+    ]
+    usd_summary = [
+        (40, 650, "Personal Account (USD)"),
+        (40, 596, "Opening balance"),
+        (120, 596, "$120.00"),
+        (40, 578, "Closing balance"),
+        (120, 578, "$140.00"),
+    ]
+    joint_summary = [
+        (40, 650, "Joint Account (GBP)"),
+        (40, 596, "Opening balance"),
+        (120, 596, "£90.00"),
+        (40, 578, "Closing balance"),
+        (120, 578, "£90.00"),
+    ]
+    savings_summary = [
+        (40, 688, "Savings Accounts Summaries"),
+        (40, 650, "Clearbank (GBP)"),
+        (40, 614, "Savings account details"),
+        (40, 596, "Opening balance"),
+        (120, 596, "£250.00"),
+        (40, 578, "Closing balance"),
+        (120, 578, "£251.20"),
+    ]
+    crypto_summary = [
+        (40, 688, "Crypto Summaries"),
+        (40, 650, "Crypto account details"),
+        (40, 596, "Opening balance"),
+        (120, 596, "£0.00"),
+        (40, 578, "Closing balance"),
+        (120, 578, "£0.00"),
+    ]
+    personal_transactions = [
+        (40, 688, "Current Accounts Transaction Statements"),
+        (40, 650, "Personal Account (GBP)"),
+        (40, 614, "Transaction statement"),
+        (40, 590, "Date"),
+        (125, 590, "Description"),
+        (257, 590, "Category"),
+        (342, 590, "Money in/out"),
+        (385, 590, "Balance"),
+        (428, 590, "Tax withheld"),
+        (471, 590, "Other taxes"),
+        (533, 590, "Fees"),
+        *_revolut_row(564, "Aug 5, 2026", "Uber Eats", "Merchant", "-£12.40", "£487.60"),
+        *_revolut_row(546, "Aug 6, 2026", "Transfer to Example Digital Assets", "Exchange", "-£30.00", "£457.60"),
+        (125, 533.7, "Europe Ltd"),
+        *_revolut_row(514, "Aug 10, 2026", "Exchanged to GBP", "Exchange", "£25.00", "£482.60"),
+        *_revolut_row(496, "Aug 21, 2026", "HappyCow", "Merchant", "-£7.60", "£475.00"),
+        (40, 477, "Total"),
+        (342, 477, "-£50.00"),
+    ]
+    usd_transactions = [
+        (40, 650, "Personal Account (USD)"),
+        (40, 614, "Transaction statement"),
+        *_revolut_row(564, "Aug 5, 2026", "Foreign Purchase", "Merchant", "-$10.00", "$130.00"),
+    ]
+    joint_transactions = [
+        (40, 650, "Joint Account (GBP)"),
+        (40, 614, "Transaction statement"),
+        *_revolut_row(564, "Aug 9, 2026", "Joint Shop", "Merchant", "-£20.00", "£70.00"),
+    ]
+    pages = [personal_summary, usd_summary, joint_summary]
+    if include_savings:
+        pages.append(savings_summary)
+    pages.extend([crypto_summary, personal_transactions, usd_transactions, joint_transactions])
+    header = [
+        (40.0, 756.8, "Custom Statement"),
+        (456.0, 743.7, "Aug 1, 2026 - Aug 31, 2026"),
+    ]
+    return [[*header, *page] for page in pages]
+
+
+def revolut_pdf(include_savings: bool = True) -> bytes:
+    return positioned_statement_pdf(revolut_pages(include_savings))

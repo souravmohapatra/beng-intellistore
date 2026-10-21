@@ -71,15 +71,17 @@ def interpret(data: bytes, content_type: str):
 
     import pypdf
 
-    from interpretation import amex, lloyds_credit, lloyds_current
+    from interpretation import amex, lloyds_credit, lloyds_current, revolut
 
     reader = pypdf.PdfReader(io.BytesIO(data))
     if reader.is_encrypted:
         return None
 
-    positioned = amex.parse_pages([_page_tokens(page) for page in reader.pages])
-    if positioned.recognised:
-        return positioned
+    token_pages = [_page_tokens(page) for page in reader.pages]
+    for positioned_parser in (amex.parse_pages, revolut.parse_pages):
+        positioned = positioned_parser(token_pages)
+        if positioned.recognised:
+            return positioned
 
     text = "\f".join((page.extract_text() or "") for page in reader.pages)
     for parser in (lloyds_current.parse, lloyds_credit.parse):
@@ -156,12 +158,27 @@ def build_result(claim: dict, parsed) -> dict:
             "payments_and_credits_pence": getattr(parsed, "payments_and_credits_pence", None),
         },
     }
+    excluded = [
+        {
+            "name": excluded_section["name"],
+            "status": excluded_section["status"],
+            "issues": [
+                {
+                    "code": excluded_section["status"],
+                    "message": excluded_section["reason"],
+                }
+            ],
+            "transactions": [],
+            "balances": [],
+        }
+        for excluded_section in getattr(parsed, "excluded_sections", [])
+    ]
     return {
         "version": claim["result_version"],
         "attempt": claim["attempt"],
         "outcome": "imported" if reconciled else "failed",
         "issues": section["issues"],
-        "sections": [section],
+        "sections": [section, *excluded],
     }
 
 
