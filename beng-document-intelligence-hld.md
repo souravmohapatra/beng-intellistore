@@ -101,9 +101,10 @@ Chart.js; it is not a separate React application. See the
 
 Development is on the Mac, with as much appropriate local testing as possible.
 At meaningful milestones, perform full end-to-end checks in the actual deployment
-environment. The exact Mac test-runtime setup is still to be selected; choosing
-the Mac does not itself select local Docker Compose or a native database install.
-Real-host acceptance remains necessary for GPU, wake, persistence and recovery.
+environment. Sourav selected Docker Desktop as the Mac test runtime for isolated
+PostgreSQL and file storage; installation, versions and readiness are not yet
+verified. Real-host acceptance remains necessary for GPU, wake, persistence and
+recovery.
 
 ```mermaid
 flowchart TB

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Overview — Statement Intelligence{% endblock %}
+{% block content %}
+  <h1>Account overview</h1>
+
+  <section aria-labelledby="accounts-heading">
+    <h2 id="accounts-heading">Named accounts</h2>
+    {% if accounts %}
+      <ul>
+        {% for account in accounts %}
+          <li>
+            <h3>{{ account.name }}</h3>
+            <p>{{ account.get_kind_display }}</p>
+            <p>Balance unknown</p>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No named accounts yet.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="dashboard-heading">
+    <h2 id="dashboard-heading">Dashboard</h2>
+    <p>No reporting period has evidence yet. Upload a statement to begin.</p>
+  </section>
+{% endblock %}

@@ -3,7 +3,7 @@
 Status: ready-for-agent
 Release: R1
 Design baseline: decisions accepted through Q76
-Implementation status: not started
+Implementation status: in progress (ticket 01 claimed; Mac runtime setup blocked)
 
 ## Problem Statement
 
@@ -116,8 +116,9 @@ August coverage.
   advisory interpretation and recovery operations. These are module
   responsibilities, not instructions to add separate deployable services.
 - Develop on the Mac with as much appropriate local testing as possible. Actual
-  deployment-host E2E checks occur at meaningful milestones. The exact Mac test
-  runtime is not selected by this specification.
+  deployment-host E2E checks occur at meaningful milestones. Sourav selected
+  Docker Desktop as the Mac test runtime for isolated PostgreSQL and files;
+  installation, versions and readiness remain to be verified.
 
 ### Intake, financial evidence and matching
 
@@ -311,7 +312,8 @@ No existing application or test suite provides prior art. The supplied-format
 inspection and invented import examples are evidence/expected-outcome inputs,
 not production parser code or completed tests. Use controllable clocks/external
 adapters for local fault scenarios, but exercise actual database/file behavior.
-Local Mac runtime setup must be selected before PostgreSQL-dependent tests run.
+Docker Desktop is the selected Mac runtime; install and verify it before
+PostgreSQL-dependent tests.
 
 ### Required fixtures and release evidence
 
@@ -421,7 +423,7 @@ record the correction before implementing a changed policy.
 
 | ID | Work to specify/verify | Required before |
 | --- | --- | --- |
-| P-01 | Select and prepare the Mac test runtime, with real PostgreSQL and isolated files; deployment Docker requirement does not settle the Mac runtime choice. | Database-dependent local tests. |
+| P-01 | Prepare the selected Docker Desktop Mac test runtime, with real PostgreSQL and isolated files. | Database-dependent local tests. |
 | P-02 | Pin compatible runtime/dependency/container versions; specify application schema, result formats, locators, durable original/record recovery and publication/claim mechanisms. | Corresponding implementation slices. |
 | P-03 | Create supported-layout fixtures and independent expected results; establish any text/CSV support explicitly; add overlap/year-boundary evidence. | Enabling each extraction or automated matching rule. |
 | P-04 | Obtain mini-PC local and NAS destination paths; verify headroom, local filesystem/flush behavior and the intended Docker daemon without changing existing services. | Provisioning and any durability claim. |

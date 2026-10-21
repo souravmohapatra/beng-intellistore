@@ -11,7 +11,9 @@ the application's job/result API rather than direct PostgreSQL access.
 
 Develop on the Mac and run as many appropriate tests there as possible, followed
 by full end-to-end checks in the actual deployment environment at meaningful
-milestones. Project deployment remains Docker-based. Local Mac Docker/Compose
-or native test-runtime setup is not selected by this decision; choose and prepare
-that explicitly before tests require it. Local success does not establish GPU,
-wake, storage, backup/recovery, or real-host deployment acceptance.
+milestones. Project deployment remains Docker-based. Sourav selected Docker
+Desktop as the Mac development/test runtime for isolated PostgreSQL and file
+storage. The Docker CLI was not available when checked; runtime installation and
+version pinning remain unverified and must precede PostgreSQL-dependent tests.
+Local success does not establish GPU, wake, storage, backup/recovery, or
+real-host deployment acceptance.

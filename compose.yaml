@@ -1,0 +1,22 @@
+name: beng-intellistore
+
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_DB: intellistore
+      POSTGRES_USER: intellistore
+      POSTGRES_PASSWORD: intellistore-local-only
+    ports:
+      # Loopback-only, non-default port so personal PostgreSQL services stay untouched.
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intellistore -d intellistore"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-data:
