@@ -23,11 +23,24 @@
 
   <section aria-labelledby="dashboard-heading">
     <h2 id="dashboard-heading">Dashboard</h2>
-    {% if report.has_evidence %}
+    <form method="get" action="{% url 'ledger:overview' %}">
       <p>
-        Reporting period {{ report.period_start|date:"Y-m-d" }} to
-        {{ report.period_end|date:"Y-m-d" }}.
+        <label>Month <input type="month" name="month"></label>
+        <label>Year <input type="number" name="year" min="1900" max="2200"></label>
+        <label>Start <input type="date" name="start"></label>
+        <label>End <input type="date" name="end"></label>
+        <button type="submit">Show period</button>
       </p>
+    </form>
+    {% if period_error %}
+      <p role="alert">{{ period_error }}</p>
+    {% endif %}
+    <p>
+      Reporting period {{ report.period_start|date:"Y-m-d" }} to
+      {{ report.period_end|date:"Y-m-d" }}.
+    </p>
+
+    {% if report.has_evidence %}
       <table>
         <caption>Posting-period totals</caption>
         <tbody>
@@ -46,14 +59,73 @@
           classification and are excluded from these totals.
         </p>
       {% endif %}
-      {% if report.net_cash_provisional %}
+      {% if report.missing_balance_accounts %}
         <p role="alert">
           Net cash is incomplete: no balance evidence for
           {{ report.missing_balance_accounts|join:", " }}.
         </p>
       {% endif %}
+      {% if report.disputed_balance_accounts %}
+        <p role="alert">
+          Disputed balance evidence for
+          {{ report.disputed_balance_accounts|join:", " }}; those accounts are
+          excluded from net cash until the conflict is resolved.
+        </p>
+      {% endif %}
+
+      <h3>Account balances</h3>
+      <table>
+        <thead>
+          <tr><th scope="col">Account</th><th scope="col">Kind</th><th scope="col">Balance</th><th scope="col">Evidence</th></tr>
+        </thead>
+        <tbody>
+          {% for row in balance_rows %}
+            <tr>
+              <td>{{ row.account.name }}</td>
+              <td>{{ row.account.get_kind_display }}</td>
+              {% if row.disputed %}
+                <td>Disputed</td>
+                <td>
+                  {{ row.alternatives|length }} conflicting observations on the latest date
+                </td>
+              {% elif row.observation %}
+                <td>{{ row.amount_display }}</td>
+                <td>{{ row.observation.observed_on }}{% if row.source %} — {{ row.source }}{% endif %}</td>
+              {% else %}
+                <td>Unknown</td>
+                <td>no balance evidence</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h3>Net-cash history</h3>
+      <p>Dated points only where balance evidence exists; no daily continuity is implied.</p>
+      {% if history_points %}
+        <ul>
+          {% for point in history_points %}
+            <li>
+              {{ point.observed_on|date:"Y-m-d" }} — {{ point.net_cash_display }}
+              {% if point.disputed %}(disputed evidence excluded){% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>No dated balance points in this period.</p>
+      {% endif %}
+
+      {% if coverage_gaps %}
+        <h3>Coverage gaps</h3>
+        <ul>
+          {% for gap in coverage_gaps %}
+            <li>{{ gap.account }}: {{ gap.from|date:"Y-m-d" }} to {{ gap.to|date:"Y-m-d" }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
     {% else %}
       <p>No reporting period has evidence yet. Upload a statement to begin.</p>
     {% endif %}
   </section>
+
 {% endblock %}

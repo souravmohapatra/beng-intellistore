@@ -68,6 +68,25 @@ class DashboardTests(TestCase):
 
         self.assertContains(page, "Net cash is incomplete")
         self.assertContains(page, "Current")
+        self.assertContains(page, "<td>Unknown</td>")
+
+class LeapDayTests(TestCase):
+    def setUp(self):
+        get_user_model().objects.create_user(username="sourav", password="local-dev-password")
+        self.client.login(username="sourav", password="local-dev-password")
+
+    def test_leap_day_default_period_is_calendar_safe(self):
+        from unittest import mock
+
+        from django.utils import timezone
+
+        with mock.patch.object(timezone, "localdate", return_value=date(2028, 2, 29)):
+            page = self.client.get("/")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "2027-03-01")
+        self.assertContains(page, "2028-02-29")
+
 
 class EmptyDashboardTests(TestCase):
     def setUp(self):

@@ -73,6 +73,16 @@ income, outgoing and a negative net-cash position, plus `Provisional: 3
 transaction(s)` and an incomplete-balance warning for an account without
 evidence.
 
+Financial review (mandatory for this ticket): all literals were re-audited
+against the event table. One must-fix: card credits are already negative debt
+movements, so the refund branch flipped the sign twice and turned a £7 refund
+into £7 of extra spending — fixed to reverse spending, with a purchase+refund
+and a refund-only regression. Net cash now returns unknown (`None`) when no
+dated observation exists instead of an evidenced £0.00, and the default
+twelve-month period handles 29 February (start becomes 1 March). The remaining
+literals (108756 spending, 250010 income, 105000 outgoing, 323030 net cash) were
+confirmed by independent arithmetic.
+
 Limits: keywords are the only available classification evidence until the review
 slice adds corrections; no transfer matching or charts here (tickets 13-17); the
 period selector and drill-down arrive next. No deployment or push. Record red/green commands, behavioral demo, review findings/fixes,

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from ledger.models import Account, AccountKind, BalanceObservation, Transaction
+from reporting.history import latest_balances
 
 
 @dataclass
@@ -35,6 +36,7 @@ class TotalsReport:
     unclassified: int = 0
     net_cash_provisional: bool = False
     missing_balance_accounts: list[str] = field(default_factory=list)
+    disputed_balance_accounts: list[str] = field(default_factory=list)
     balances_used: list[dict] = field(default_factory=list)
     currency: str = "GBP"
     has_evidence: bool = False
@@ -65,7 +67,9 @@ def classify(transaction: Transaction) -> RowEffect | None:
         if any(marker in description for marker in CARD_REPAYMENT_MARKERS):
             return RowEffect()
         if "REFUND" in description:
-            return RowEffect(spending_pence=-amount)
+            # Card credits are already negative debt movements; the refund
+            # reverses spending without a second sign flip.
+            return RowEffect(spending_pence=amount)
         # A card credit without repayment or refund evidence is not classified.
         return None
 
@@ -110,10 +114,15 @@ def compute_totals(period_start: date, period_end: date) -> TotalsReport:
         report.income_pence += effect.income_pence
         report.cash_outgoing_pence += effect.cash_outgoing_pence
 
-    report.net_cash_pence, report.missing_balance_accounts, report.balances_used = (
-        _net_cash(period_end)
+    (
+        report.net_cash_pence,
+        report.missing_balance_accounts,
+        report.disputed_balance_accounts,
+        report.balances_used,
+    ) = _net_cash(period_end)
+    report.net_cash_provisional = bool(
+        report.missing_balance_accounts or report.disputed_balance_accounts
     )
-    report.net_cash_provisional = bool(report.missing_balance_accounts)
     report.has_evidence = bool(report.balances_used) or Transaction.objects.filter(
         posted_on__gte=period_start, posted_on__lte=period_end
     ).exists()
@@ -122,18 +131,18 @@ def compute_totals(period_start: date, period_end: date) -> TotalsReport:
 
 def _net_cash(period_end: date):
     accounts = Account.objects.order_by("name")
+    latest = latest_balances(period_end)
     total = 0
     missing: list[str] = []
+    disputed: list[str] = []
     used: list[dict] = []
 
     for account in accounts:
-        observation = (
-            BalanceObservation.objects.filter(
-                account=account, observed_on__isnull=False, observed_on__lte=period_end
-            )
-            .order_by("-observed_on", "-pk")
-            .first()
-        )
+        entry = latest[account.pk]
+        if entry.disputed:
+            disputed.append(account.name)
+            continue
+        observation = entry.observation
         if observation is None:
             missing.append(account.name)
             continue
@@ -149,4 +158,6 @@ def _net_cash(period_end: date):
                 "observed_on": observation.observed_on,
             }
         )
-    return total, missing, used
+    if not used:
+        return None, missing, disputed, used
+    return total, missing, disputed, used

@@ -1,5 +1,6 @@
 """Views for the ledger application."""
 
+from datetime import date
 from pathlib import Path
 
 from django.conf import settings
@@ -17,6 +18,7 @@ from intake.storage import StorageUnavailable
 from jobs.models import Job
 from ledger.forms import UploadForm
 from ledger.models import Account, BalanceObservation, Transaction, Upload
+from reporting.history import account_balance_rows, coverage_gaps, format_pence, net_cash_history
 from reporting.totals import compute_totals
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
@@ -34,25 +36,89 @@ class AccountOverview(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        period_end = timezone.localdate()
-        period_start = period_end.replace(year=period_end.year - 1) + timezone.timedelta(days=1)
+        period_start, period_end, period_error = _selected_period(self.request)
         report = compute_totals(period_start, period_end)
-        context["report"] = report
-        context["spending_display"] = _format_pence(report.spending_pence)
-        context["income_display"] = _format_pence(report.income_pence)
-        context["cash_outgoing_display"] = _format_pence(report.cash_outgoing_pence)
-        context["net_cash_display"] = (
-            None
-            if report.net_cash_pence is None
-            else _format_pence(report.net_cash_pence)
+        context.update(
+            {
+                "report": report,
+                "period_error": period_error,
+                "spending_display": format_pence(report.spending_pence),
+                "income_display": format_pence(report.income_pence),
+                "cash_outgoing_display": format_pence(report.cash_outgoing_pence),
+                "net_cash_display": (
+                    None
+                    if report.net_cash_pence is None
+                    else format_pence(report.net_cash_pence)
+                ),
+                "history_points": [
+                    {
+                        "observed_on": point.observed_on,
+                        "net_cash_display": format_pence(point.net_cash_pence),
+                        "disputed": point.disputed,
+                    }
+                    for point in net_cash_history(period_start, period_end)
+                ],
+                "coverage_gaps": coverage_gaps(period_start, period_end),
+                "balance_rows": [
+                    {
+                        **row,
+                        "amount_display": (
+                            None
+                            if row["observation"] is None
+                            else format_pence(row["observation"].amount_pence)
+                        ),
+                    }
+                    for row in account_balance_rows(period_end)
+                ],
+            }
         )
         return context
 
 
-def _format_pence(amount_pence: int) -> str:
-    sign = "-" if amount_pence < 0 else ""
-    pence = abs(amount_pence)
-    return f"{sign}£{pence // 100:,}.{pence % 100:02d}"
+def _selected_period(request):
+    """Resolve month/year/custom selection, falling back to twelve months."""
+    today = timezone.localdate()
+    default_end = today
+    try:
+        anniversary = today.replace(year=today.year - 1)
+    except ValueError:  # 29 February: clamp to 28 February, giving 1 March.
+        anniversary = today.replace(year=today.year - 1, day=28)
+    default_start = anniversary + timezone.timedelta(days=1)
+
+    month = request.GET.get("month")
+    year = request.GET.get("year")
+    start = request.GET.get("start")
+    end = request.GET.get("end")
+
+    try:
+        if month:
+            first = _parse_iso(f"{month}-01")
+            last = (first.replace(day=28) + timezone.timedelta(days=4)).replace(day=1) - timezone.timedelta(days=1)
+            return first, last, None
+        if year:
+            year_value = int(year)
+            return date(year_value, 1, 1), date(year_value, 12, 31), None
+        if start or end:
+            if not start or not end:
+                raise ValueError("both dates are required")
+            first = _parse_iso(start)
+            last = _parse_iso(end)
+            if first > last:
+                raise ValueError("the start date is after the end date")
+            return first, last, None
+    except (ValueError, TypeError):
+        return (
+            default_start,
+            default_end,
+            "Those dates are not a valid period; showing the last twelve months.",
+        )
+    return default_start, default_end, None
+
+
+def _parse_iso(value: str) -> date:
+    from datetime import date as date_type
+
+    return date_type.fromisoformat(value)
 
 
 class AccountTransactionsView(LoginRequiredMixin, DetailView):

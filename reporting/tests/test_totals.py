@@ -89,10 +89,27 @@ class TotalsTests(TestCase):
     def test_missing_balance_evidence_is_visible_not_zero(self):
         report = compute_totals(date(2026, 8, 1), date(2026, 8, 31))
 
+        self.assertIsNone(report.net_cash_pence)
         self.assertTrue(report.net_cash_provisional)
         self.assertEqual(
             sorted(report.missing_balance_accounts), ["Card", "Current", "Savings"]
         )
+
+    def test_conflicting_balance_evidence_is_disputed_not_resolved(self):
+        BalanceObservation.objects.create(
+            account=self.current, upload=self.upload_current, kind="closing",
+            observed_on=date(2026, 8, 31), amount_pence=300000,
+        )
+        BalanceObservation.objects.create(
+            account=self.current, upload=self.upload_card, kind="closing",
+            observed_on=date(2026, 8, 31), amount_pence=250000,
+        )
+
+        report = compute_totals(date(2026, 8, 1), date(2026, 8, 31))
+
+        self.assertTrue(report.net_cash_provisional)
+        self.assertEqual(report.disputed_balance_accounts, ["Current"])
+        self.assertNotIn("Current", [row["account"] for row in report.balances_used])
 
     def test_unknown_classification_is_excluded_and_marked_provisional(self):
         add(self.current, self.upload_current, date(2026, 8, 9), "To someone", "Others", -500)
@@ -127,6 +144,24 @@ class TotalsTests(TestCase):
 
         self.assertEqual(report.income_pence, 251010)
         self.assertEqual(report.unclassified, 0)
+
+    def test_card_refund_reverses_spending_without_a_second_sign_flip(self):
+        add(self.card, self.upload_card, date(2026, 8, 16), "SHOP REFUND", "", -700)
+
+        report = compute_totals(date(2026, 8, 1), date(2026, 8, 31))
+
+        self.assertEqual(report.spending_pence, 108756 - 700)
+        self.assertEqual(report.income_pence, 250010)
+        self.assertEqual(report.cash_outgoing_pence, 105000)
+
+    def test_refund_only_period_shows_negative_spending(self):
+        add(self.card, self.upload_card, date(2026, 9, 1), "SHOP REFUND", "", -700)
+
+        report = compute_totals(date(2026, 9, 1), date(2026, 9, 30))
+
+        self.assertEqual(report.spending_pence, -700)
+        self.assertEqual(report.income_pence, 0)
+        self.assertEqual(report.cash_outgoing_pence, 0)
 
     def test_card_credit_without_evidence_is_not_a_refund(self):
         add(self.card, self.upload_card, date(2026, 8, 11), "SOMETHING BACK", "", -700)
