@@ -36,6 +36,23 @@ Stop the database with `docker compose down`. This keeps the development volume.
 `docker compose down --volumes` **destroys** the development database and is only
 for deliberately discarding it.
 
+## Worker
+
+Accepting an upload creates a waiting job. Waiting work is not claimable just
+because a worker is running: release it with **Process now** (or the later
+nightly batch). One job is processed at a time.
+
+```bash
+.venv/bin/python manage.py provision_worker --label laptop   # prints the token once
+WORKER_TOKEN=<token> .venv/bin/python -m worker \
+    --base-url http://127.0.0.1:8000 --work-root /tmp/worker
+```
+
+The worker credential is replaceable and scoped to claims, its assigned source,
+progress and result submission; it cannot sign in as the user or reach the
+database. The worker downloads only its assigned original into a temporary
+directory and removes it when done.
+
 ## Checks
 
 `./scripts/smoke.sh` creates its own venv, installs the pins, and runs the

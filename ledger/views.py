@@ -13,6 +13,7 @@ from django.views.generic import DetailView, ListView
 from intake.accept import accept_upload
 from intake.inspect import FileTooLarge, IntakeRejected
 from intake.storage import StorageUnavailable
+from jobs.models import Job
 from ledger.forms import UploadForm
 from ledger.models import Account, Upload
 
@@ -88,7 +89,8 @@ class UploadListView(LoginRequiredMixin, View):
             self.template_name,
             {
                 "form": form,
-                "uploads": Upload.objects.select_related("account", "original"),
+                "uploads": Upload.objects.select_related("account", "original", "job"),
+                "waiting_count": Job.objects.filter(status=Job.Status.WAITING).count(),
                 "intake_error": intake_error,
             },
             status=status,
@@ -100,7 +102,9 @@ class UploadDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "upload"
 
     def get_queryset(self):
-        return Upload.objects.select_related("account", "original")
+        return Upload.objects.select_related("account", "original", "job").prefetch_related(
+            "job__attempts__events", "job__attempts__result"
+        )
 
 
 class UploadOriginalView(LoginRequiredMixin, View):

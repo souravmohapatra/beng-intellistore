@@ -15,6 +15,16 @@
     </form>
   </section>
 
+  <section aria-labelledby="processing-heading">
+    <h2 id="processing-heading">Processing</h2>
+    <p>{{ waiting_count }} upload(s) waiting for release.</p>
+    <form method="post" action="{% url 'jobs:process_now' %}">
+      {% csrf_token %}
+      <button type="submit">Process now</button>
+    </form>
+    <p>Releasing work does not interrupt a job that is already processing.</p>
+  </section>
+
   <section aria-labelledby="receipts-heading">
     <h2 id="receipts-heading">Accepted originals</h2>
     {% if uploads %}
@@ -23,6 +33,7 @@
           <li>
             <a href="{% url 'ledger:upload_detail' upload.pk %}">{{ upload.filename }}</a>
             — {{ upload.account.name }} — {{ upload.get_status_display }}
+            {% if upload.job %}— {{ upload.job.get_status_display }}{% endif %}
             — {{ upload.received_at|date:"Y-m-d H:i" }}
           </li>
         {% endfor %}

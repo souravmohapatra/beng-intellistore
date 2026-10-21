@@ -24,5 +24,33 @@
       — <a href="{% url 'ledger:upload_original' upload.pk %}">open original</a>
     </dd>
   </dl>
+
+  {% if upload.job %}
+    <section aria-labelledby="processing-heading">
+      <h2 id="processing-heading">Processing</h2>
+      <p>Job: {{ upload.job.get_status_display }}</p>
+      {% with attempt=upload.job.latest_attempt %}
+        {% if attempt %}
+          <p>Attempt {{ attempt.number }} by {{ attempt.credential.label }}</p>
+          {% if attempt.events.all %}
+            <ol>
+              {% for event in attempt.events.all %}
+                <li>{{ event.stage }}{% if event.message %} — {{ event.message }}{% endif %}</li>
+              {% endfor %}
+            </ol>
+          {% endif %}
+          {% if attempt.result %}
+            <p>Outcome: {{ attempt.result.outcome }}</p>
+            <ul>
+              {% for issue in attempt.result.payload.issues %}
+                <li>{{ issue.code }}{% if issue.message %}: {{ issue.message }}{% endif %}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endif %}
+      {% endwith %}
+    </section>
+  {% endif %}
+
   <p><a href="{% url 'ledger:uploads' %}">Back to uploads</a></p>
 {% endblock %}

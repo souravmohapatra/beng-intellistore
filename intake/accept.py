@@ -6,6 +6,7 @@ from django.db import transaction
 
 from intake.inspect import inspect
 from intake.storage import store_original
+from jobs.models import Job
 from ledger.models import Original, Upload
 
 
@@ -29,13 +30,15 @@ def accept_upload(*, account, filename: str, data: bytes) -> Upload:
                 "stored_path": stored.stored_path,
             },
         )
-        return Upload.objects.create(
+        upload = Upload.objects.create(
             original=original,
             account=account,
             filename=Path(filename).name or "statement",
             status=inspection.status,
             review_note=_identity_note(stored.sha256, account),
         )
+        Job.objects.create(upload=upload)
+        return upload
 
 
 def _identity_note(sha256: str, account) -> str:

@@ -17,6 +17,7 @@ A Lloyds Current upload is processed by the worker and appears as exact, dated t
 - [ ] Normalize money-in/out to exact pence, preserve source descriptions/types/date meanings and locators, and reconcile running/summary balances.
 - [ ] A failed reconciliation retains the original and prior financial view with a review issue; no guessed rows.
 - [ ] Demonstrate upload, Process now, assigned-source processing, committed transaction list and source reopening end to end on the Mac.
+- [ ] Carried from ticket 03: detect a first-time statement whose source identity contradicts the selected named account, show it, and never silently reassign it.
 
 ## Test interface and verification
 
@@ -29,7 +30,7 @@ for review, host evidence and permission limits.
 
 ## Prerequisites and scope limit
 
-P-03 Lloyds Current fixture/oracle; public interpretation interface established by this slice.
+P-03 Lloyds Current fixture/oracle (including an identity-mismatch fixture); public interpretation interface established by this slice.
 
 One supplied statement layout only. Strong review of initial parser/publication contract is mandatory.
 

@@ -44,8 +44,14 @@ status `unsupported` and a visible explanation that no transactions were
 imported. The last successful account selection is remembered in session.
 Detectable identity mismatch currently uses authoritative prior receipts:
 identical bytes already accepted for other named accounts show a warning and the
-receipt keeps the newly selected account. Source-embedded identity detection
-arrives with fixture-backed layouts (tickets 05, 07–09).
+receipt keeps the newly selected account.
+
+Carried requirement (not silently claimed): source-embedded identity — detecting
+that a first-time statement belongs to a different account than the one selected
+— cannot exist before a fixture-backed layout exposes an identity. It is tracked
+as a required check in [ticket 05](05-import-lloyds-current-into-a-source-linked-transaction-view.md)
+and must be re-verified there with Lloyds Current fixtures; tickets 07–09 repeat
+it per family. P-03 identity fixtures are that work, not this ticket's.
 
 Red: 12 of 28 tests failing/erroring (encrypted, corrupt, image-only, size, page
 limits, content-over-extension, unsupported status, remembered selection,
