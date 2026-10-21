@@ -67,6 +67,17 @@ movements using process dates with transaction dates retained, the −£100.00
 credit, the dated closing debt and an undated opening balance, with source page
 links.
 
+Independent review findings, all fixed with regressions: (1) purchase/process
+years were inferred independently, so a process date could precede the purchase
+— the parser now requires `transaction ≤ process ≤ statement` and reports
+`implausible_dates`; (2) any `dd/mm/yy` anywhere could become the statement
+date, including a reference in a description — only the cover's Date field (or a
+single cover date) is accepted, otherwise `missing_statement_date`; (3) repeated
+conflicting balance anchors were silently ignored — they now raise
+`contradictory_balance_anchor`; (4) multiline merchant continuations were
+dropped and could hide a following-line credit marker — description continuations
+are appended and the CR lookahead survives an intervening continuation.
+
 Limits: one Amex layout; annual summary content is ignored rather than
 cross-checked; real-source accuracy remains a release gate; no FX ledger. No
 deployment or push. Record red/green commands, behavioral demo, review findings/fixes,

@@ -10,7 +10,7 @@ process date is the reporting date while the transaction date is retained.
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -85,9 +85,16 @@ def parse(tokens: list[tuple[float, float, str]]) -> ParseResult:
     return parse_pages([tokens])
 
 
+@dataclass(frozen=True)
+class _Line:
+    y: float
+    text: str
+    min_x: float
+
+
 def parse_pages(pages: list[list[tuple[float, float, str]]]) -> ParseResult:
     lines_per_page = [_reconstruct_lines(page) for page in pages]
-    flat = [line for page in lines_per_page for line in page]
+    flat = [line.text for page in lines_per_page for line in page]
     if not any("Statement of Account" in line or "Transaction Details" in line for line in flat):
         return ParseResult(recognised=False)
 
@@ -98,31 +105,54 @@ def parse_pages(pages: list[list[tuple[float, float, str]]]) -> ParseResult:
             Issue("missing_statement_date", "The statement date was not found.")
         )
 
+    continuations: list[tuple[int, _Line]] = []
+    row_positions: list[tuple[int, float]] = []
+
     for page_number, lines in enumerate(lines_per_page, start=1):
+        consumed: set[int] = set()
         index = 0
         while index < len(lines):
+            if index in consumed:
+                index += 1
+                continue
             line = lines[index]
             index += 1
 
-            previous = PREVIOUS_BALANCE.match(line)
+            previous = PREVIOUS_BALANCE.match(line.text)
             if previous:
                 amount = _maybe_pence(previous.group(1))
-                if amount is not None and result.opening_pence is None:
-                    result.opening_pence = amount
-                    result.balances.append(BalanceAnchor("opening", amount, None))
+                if amount is not None:
+                    if result.opening_pence is None:
+                        result.opening_pence = amount
+                        result.balances.append(BalanceAnchor("opening", amount, None))
+                    elif result.opening_pence != amount:
+                        result.issues.append(
+                            Issue(
+                                "contradictory_balance_anchor",
+                                "The statement repeats a different previous balance.",
+                            )
+                        )
                 continue
 
-            new_balance = NEW_BALANCE.match(line)
+            new_balance = NEW_BALANCE.match(line.text)
             if new_balance:
                 amount = _maybe_pence(new_balance.group(1))
-                if amount is not None and result.closing_pence is None:
-                    result.closing_pence = amount
-                    result.balances.append(
-                        BalanceAnchor("closing", amount, statement_date)
-                    )
+                if amount is not None:
+                    if result.closing_pence is None:
+                        result.closing_pence = amount
+                        result.balances.append(
+                            BalanceAnchor("closing", amount, statement_date)
+                        )
+                    elif result.closing_pence != amount:
+                        result.issues.append(
+                            Issue(
+                                "contradictory_balance_anchor",
+                                "The statement repeats a different new balance.",
+                            )
+                        )
                 continue
 
-            payments = PAYMENTS_AND_CREDITS.match(line)
+            payments = PAYMENTS_AND_CREDITS.match(line.text)
             if payments:
                 amount = _maybe_pence(payments.group(1))
                 if amount is not None:
@@ -137,15 +167,24 @@ def parse_pages(pages: list[list[tuple[float, float, str]]]) -> ParseResult:
                         )
                 continue
 
-            row = ROW_PATTERN.match(line)
+            row = ROW_PATTERN.match(line.text)
             if row is None:
+                if _is_continuation(line) and result.rows:
+                    continuations.append((page_number, line))
                 continue
 
-            credit = index < len(lines) and lines[index].strip().upper() == "CR"
-            if credit:
-                index += 1
+            credit = False
+            for lookahead in range(index, min(index + 2, len(lines))):
+                if lines[lookahead].text.strip().upper() == "CR":
+                    credit = True
+                    consumed.add(lookahead)
+                    break
+            before = len(result.rows)
             _consume_row(row, credit, page_number, statement_date, result)
+            if len(result.rows) > before:
+                row_positions.append((page_number, line.y, before))
 
+    _attach_continuations(result, continuations, row_positions)
     _validate(result)
     return result
 
@@ -166,21 +205,44 @@ def _reconstruct_lines(tokens: list[tuple[float, float, str]]) -> list[str]:
         else:
             clusters.append((y, [(x, text)]))
     return [
-        " ".join(text for _x, text in sorted(group, key=lambda item: item[0]))
-        for _y, group in clusters
+        _Line(
+            y=y,
+            text=" ".join(text for _x, text in sorted(group, key=lambda item: item[0])),
+            min_x=min(x for x, _text in group),
+        )
+        for y, group in clusters
     ]
 
 
 def _statement_date(lines_per_page) -> date | None:
-    for lines in lines_per_page:
+    """Take the date nearest the cover's ``Date`` field, not any reference date."""
+    for lines in lines_per_page[:1]:
+        header_ys = [
+            line.y
+            for line in lines
+            if re.search(r"\bDate\b", line.text) and "Transaction" not in line.text
+        ]
+        candidates = []
         for line in lines:
-            match = STATEMENT_DATE_PATTERN.search(line)
-            if match:
-                day, month, year = match.groups()
-                try:
-                    return date(2000 + int(year), int(month), int(day))
-                except ValueError:
-                    return None
+            match = STATEMENT_DATE_PATTERN.search(line.text)
+            if not match:
+                continue
+            day, month, year = match.groups()
+            try:
+                parsed = date(2000 + int(year), int(month), int(day))
+            except ValueError:
+                continue
+            candidates.append((line.y, parsed))
+        if not candidates:
+            continue
+        if header_ys:
+            header_y = min(header_ys, key=lambda y: min(abs(y - c[0]) for c in candidates))
+            nearest = min(candidates, key=lambda c: abs(c[0] - header_y))
+            if abs(nearest[0] - header_y) <= 40:
+                return nearest[1]
+            continue
+        if len(candidates) == 1:
+            return candidates[0][1]
     return None
 
 
@@ -219,6 +281,15 @@ def _consume_row(row, credit: bool, page_number: int, statement_date, result: Pa
             )
         )
         return
+    if statement_date is not None and not (transaction_date <= process_date <= statement_date):
+        result.issues.append(
+            Issue(
+                "implausible_dates",
+                f"{row.group('description').strip()} is processed on "
+                f"{process_date.isoformat()} but transacted on {transaction_date.isoformat()}.",
+            )
+        )
+        return
 
     result.rows.append(
         ParsedTransaction(
@@ -231,6 +302,39 @@ def _consume_row(row, credit: bool, page_number: int, statement_date, result: Pa
             source_text=row.group(0) + (" CR" if credit else ""),
         )
     )
+
+
+ANNOTATION_PREFIXES = ("Exchange Rate", "Nonsterling", "+")
+
+
+def _is_continuation(line: _Line) -> bool:
+    return (
+        95 <= line.min_x <= 460
+        and not line.text.upper().startswith("CR")
+        and not any(line.text.startswith(prefix) for prefix in ANNOTATION_PREFIXES)
+        and not ROW_PATTERN.match(line.text)
+    )
+
+
+def _attach_continuations(result: ParseResult, continuations, row_positions) -> None:
+    """Append multiline description fragments to the row directly above them."""
+    for page_number, line in continuations:
+        candidates = [
+            (index, y)
+            for page, y, index in row_positions
+            if page == page_number and 0 < y - line.y <= 14
+        ]
+        if not candidates:
+            continue
+        index, _y = min(candidates, key=lambda item: item[1] - line.y)
+        row = result.rows[index]
+        if line.text.strip() == row.description:
+            continue
+        result.rows[index] = replace(
+            row,
+            description=f"{row.description} {line.text}".strip(),
+            source_text=f"{row.source_text} / {line.text}",
+        )
 
 
 def _maybe_pence(text: str) -> int | None:

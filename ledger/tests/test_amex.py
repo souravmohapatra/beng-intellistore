@@ -63,6 +63,65 @@ class AmexParsingTests(TestCase):
         self.assertNotIn("Nonsterling Transaction Fee 1.50", descriptions)
         self.assertEqual(len(result.rows), 5)
 
+    def test_process_date_before_purchase_is_rejected(self):
+        pages = amex_pages()
+        pages[1] = [
+            (x, y, "26" if (x, y, text) == (75.8, 413.5, "28") else text)
+            for x, y, text in pages[1]
+        ]
+
+        result = parse_pages(pages)
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("implausible_dates", [issue.code for issue in result.issues])
+
+    def test_a_reference_date_cannot_become_the_statement_date(self):
+        pages = amex_pages()
+        pages[0] = [
+            (x, y, text)
+            for x, y, text in pages[0]
+            if not (text in {"10", "/", "09", "26"} and y == 716.4)
+        ]
+        pages[1].append((100.8, 400.0, "REFERENCE 01/10/27"))
+
+        result = parse_pages(pages)
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("missing_statement_date", [issue.code for issue in result.issues])
+
+    def test_contradictory_balance_anchors_are_reported(self):
+        pages = amex_pages()
+        pages[0].append((14.4, 610.0, "New Balance"))
+        pages[0].append((400.0, 610.0, "£"))
+        pages[0].append((415.0, 610.0, "900.00"))
+
+        result = parse_pages(pages)
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("contradictory_balance_anchor", [issue.code for issue in result.issues])
+
+    def test_description_continuation_is_kept(self):
+        pages = amex_pages()
+        pages[1].append((100.8, 460.0, "ORDER REFERENCE ABC123"))
+
+        result = parse_pages(pages)
+
+        self.assertTrue(result.reconciled, [issue.message for issue in result.issues])
+        self.assertIn("ORDER REFERENCE ABC123", result.rows[1].description)
+
+    def test_credit_marker_is_found_across_a_continuation_line(self):
+        pages = amex_pages()
+        pages[1] = [
+            (x, y, "100.00" if (x, y, text) == (504.2, 502.6, "100.00") else text)
+            for x, y, text in pages[1]
+        ]
+        pages[1].append((100.8, 495.0, "PAYMENT REFERENCE XYZ"))
+
+        result = parse_pages(pages)
+
+        self.assertEqual(result.rows[0].amount_pence, -10000)
+        self.assertIn("PAYMENT REFERENCE XYZ", result.rows[0].description)
+
     def test_pdf_tokens_reconstruct_the_same_rows(self):
         from_pdf = parse_pages(extract_positioned_token_pages(amex_pdf()))
 
