@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from interpretation.revolut import parse_pages
 from jobs.models import WorkerCredential
-from ledger.models import Account, AccountKind, Transaction, Upload
+from ledger.models import Account, AccountKind, BalanceObservation, Transaction, Upload
 from ledger.tests.statement_fixtures import revolut_pages
 from ledger.tests.support import UploadSetupMixin
 from worker.client import build_result
@@ -47,7 +47,7 @@ class RevolutParsingTests(TestCase):
             [("opening", date(2026, 8, 1)), ("closing", date(2026, 8, 31))],
         )
 
-    def test_excluded_sections_are_named_and_savings_is_deferred(self):
+    def test_excluded_sections_are_named_and_savings_is_parsed_separately(self):
         result = self.parse()
 
         self.assertEqual(
@@ -56,8 +56,16 @@ class RevolutParsingTests(TestCase):
                 ("personal_account_usd", "ignored"),
                 ("joint_account_gbp", "ignored"),
                 ("crypto", "ignored"),
-                ("savings_account_gbp", "deferred"),
             ],
+        )
+        self.assertTrue(result.savings.recognised)
+        self.assertEqual(
+            [(row.posted_on, row.amount_pence) for row in result.savings.rows],
+            [(date(2026, 8, 1), 10), (date(2026, 8, 2), 10), (date(2026, 8, 3), 10)],
+        )
+        self.assertEqual(
+            [(balance.kind, balance.observed_on) for balance in result.savings.balances],
+            [("opening", date(2026, 8, 1)), ("closing", date(2026, 8, 31))],
         )
 
     def test_foreign_and_joint_rows_never_become_gbp_transactions(self):
@@ -94,12 +102,16 @@ class RevolutPublicationTests(UploadSetupMixin, TestCase):
             HTTP_AUTHORIZATION=f"Bearer {self.token}",
         )
 
-    def import_statement(self, include_savings=True, account=None):
-        from django.core.files.uploadedfile import SimpleUploadedFile
+    def import_statement(self, include_savings=True, account=None, savings_account=None):
         from ledger.tests.statement_fixtures import positioned_statement_pdf
 
         pdf = positioned_statement_pdf(revolut_pages(include_savings=include_savings))
-        self.upload(pdf, filename="revolut.pdf", account=account or self.account)
+        self.upload(
+            pdf,
+            filename="revolut.pdf",
+            account=account or self.account,
+            savings_account=savings_account,
+        )
         self.client.post(reverse("jobs:process_now"))
         claim = self.api("jobs:claim", None).json()
         parsed = parse_pages(revolut_pages(include_savings=include_savings))
@@ -117,8 +129,94 @@ class RevolutPublicationTests(UploadSetupMixin, TestCase):
             ["Uber Eats", "Transfer to Example Digital Assets Europe Ltd", "Exchanged to GBP", "HappyCow"],
         )
         detail = self.client.get(reverse("ledger:upload_detail", args=[upload.pk]))
-        self.assertContains(detail, "savings_account_gbp")
+        self.assertContains(detail, "revolut_savings_gbp")
+        self.assertContains(detail, "mapping_required")
         self.assertContains(detail, "joint_account_gbp")
+
+    def import_pages(self, pages, savings_account=None, account=None):
+        from ledger.tests.statement_fixtures import positioned_statement_pdf
+
+        self.upload(
+            positioned_statement_pdf(pages),
+            filename="revolut.pdf",
+            account=account or self.account,
+            savings_account=savings_account,
+        )
+        self.client.post(reverse("jobs:process_now"))
+        claim = self.api("jobs:claim", None).json()
+        return self.api("jobs:result", build_result(claim, parse_pages(pages)), args=[claim["job"]])
+
+    def test_savings_interest_and_balances_publish_to_the_confirmed_account(self):
+        savings = Account.objects.create(name="Revolut Savings", kind=AccountKind.SAVINGS)
+
+        response = self.import_statement(savings_account=savings)
+
+        self.assertEqual(response.json()["outcome"], "imported")
+        self.assertEqual(Upload.objects.get().status, Upload.Status.IMPORTED)
+        self.assertEqual(Transaction.objects.filter(account=self.account).count(), 4)
+        interest = Transaction.objects.filter(account=savings)
+        self.assertEqual(interest.count(), 3)
+        self.assertEqual(set(interest.values_list("transaction_type", flat=True)), {"Interest"})
+        self.assertEqual(
+            list(
+                BalanceObservation.objects.filter(account=savings)
+                .order_by("kind")
+                .values_list("kind", "observed_on", "amount_pence")
+            ),
+            [
+                ("closing", date(2026, 8, 31), 25030),
+                ("opening", date(2026, 8, 1), 25000),
+            ],
+        )
+
+    def test_unexplained_savings_change_is_visible(self):
+        savings = Account.objects.create(name="Revolut Savings", kind=AccountKind.SAVINGS)
+        pages = revolut_pages()
+        pages = [
+            [
+                (x, y, "£260.00" if (x, y, text) == (120, 578, "£250.30") else text)
+                for x, y, text in page
+            ]
+            for page in pages
+        ]
+
+        response = self.import_pages(pages, savings_account=savings)
+
+        self.assertEqual(response.json()["outcome"], "imported")
+        upload = Upload.objects.get()
+        detail = self.client.get(reverse("ledger:upload_detail", args=[upload.pk]))
+        self.assertContains(detail, "unexplained_savings_change")
+        self.assertEqual(Transaction.objects.filter(account=savings).count(), 3)
+
+    def test_savings_failure_leaves_personal_rows_published(self):
+        savings = Account.objects.create(name="Revolut Savings", kind=AccountKind.SAVINGS)
+        pages = revolut_pages()
+        savings_page = next(
+            page
+            for page in pages
+            if any(text == "Savings Accounts Summaries" for _x, _y, text in page)
+        )
+        savings_page[:] = [
+            token
+            for token in savings_page
+            if token not in ((40, 578, "Closing balance"), (120, 578, "£250.30"))
+        ]
+
+        response = self.import_pages(pages, savings_account=savings)
+
+        self.assertEqual(response.json()["outcome"], "partial")
+        self.assertEqual(Upload.objects.get().status, Upload.Status.NEEDS_REVIEW)
+        self.assertEqual(Transaction.objects.filter(account=self.account).count(), 4)
+        self.assertEqual(Transaction.objects.filter(account=savings).count(), 0)
+        self.assertEqual(BalanceObservation.objects.filter(account=savings).count(), 0)
+
+    def test_confirmed_savings_mapping_is_remembered(self):
+        savings = Account.objects.create(name="Revolut Savings", kind=AccountKind.SAVINGS)
+
+        self.import_statement(savings_account=savings)
+
+        page = self.client.get(reverse("ledger:uploads"))
+        self.assertContains(page, f'value="{savings.pk}" selected')
 
     def test_statement_without_savings_is_complete(self):
         response = self.import_statement(include_savings=False)

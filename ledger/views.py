@@ -18,6 +18,7 @@ from ledger.forms import UploadForm
 from ledger.models import Account, BalanceObservation, Transaction, Upload
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
+LAST_SAVINGS_SESSION_KEY = "intake.last_savings_account_id"
 
 
 class AccountOverview(LoginRequiredMixin, ListView):
@@ -66,6 +67,7 @@ class UploadListView(LoginRequiredMixin, View):
         try:
             upload = accept_upload(
                 account=account,
+                savings_account=form.cleaned_data.get("savings_account"),
                 filename=submitted.name,
                 data=submitted.read(),
             )
@@ -92,14 +94,21 @@ class UploadListView(LoginRequiredMixin, View):
             )
 
         request.session[LAST_ACCOUNT_SESSION_KEY] = account.pk
+        savings = form.cleaned_data.get("savings_account")
+        if savings is not None:
+            request.session[LAST_SAVINGS_SESSION_KEY] = savings.pk
         return redirect("ledger:upload_detail", pk=upload.pk)
 
     @staticmethod
     def _initial(request):
+        initial = {}
         account_id = request.session.get(LAST_ACCOUNT_SESSION_KEY)
         if account_id and Account.objects.filter(pk=account_id).exists():
-            return {"account": account_id}
-        return {}
+            initial["account"] = account_id
+        savings_id = request.session.get(LAST_SAVINGS_SESSION_KEY)
+        if savings_id and Account.objects.filter(pk=savings_id).exists():
+            initial["savings_account"] = savings_id
+        return initial
 
     def _render(self, request, form, status=200, intake_error=None):
         return render(

@@ -28,16 +28,14 @@ class UploadSetupMixin:
         )
         self.client.force_login(self.user)
 
-    def upload(self, data, filename="statement.pdf", account=None):
-        return self.client.post(
-            reverse("ledger:uploads"),
-            {
-                "account": (account or self.account).pk,
-                "file": SimpleUploadedFile(
-                    filename, data, content_type="application/pdf"
-                ),
-            },
-        )
+    def upload(self, data, filename="statement.pdf", account=None, savings_account=None):
+        payload = {
+            "account": (account or self.account).pk,
+            "file": SimpleUploadedFile(filename, data, content_type="application/pdf"),
+        }
+        if savings_account is not None:
+            payload["savings_account"] = savings_account.pk
+        return self.client.post(reverse("ledger:uploads"), payload)
 
     def stored_blobs(self):
         originals = self.data_dir / "originals"

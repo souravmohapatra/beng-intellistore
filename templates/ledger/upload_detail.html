@@ -46,6 +46,11 @@
                 {% if section.status != "ok" %}
                   <li>{{ section.name }} — {{ section.status }}{% if section.issues %}: {{ section.issues.0.message }}{% endif %}</li>
                 {% endif %}
+                {% for issue in section.issues %}
+                  {% if section.status == "ok" %}
+                    <li>{{ section.name }} — {{ issue.code }}: {{ issue.message }}</li>
+                  {% endif %}
+                {% endfor %}
               {% endfor %}
               {% for issue in attempt.result.payload.issues %}
                 <li>{{ issue.code }}{% if issue.message %}: {{ issue.message }}{% endif %}</li>

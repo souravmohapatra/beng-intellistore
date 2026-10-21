@@ -1,6 +1,6 @@
 # 10: Add savings mapping and independent account-section outcomes
 
-Status: ready-for-agent
+Status: done
 Approval: ticket breakdown approved by Sourav
 Blocked by: 09
 Parent: [First-release specification](../spec.md)
@@ -13,10 +13,10 @@ One Revolut upload populates personal GBP and savings GBP, preserving valid sect
 
 ## Acceptance criteria
 
-- [ ] Confirm both section-to-named-account mappings on first import and reuse only with consistent source identity; never require PDF splitting.
-- [ ] Publish supplied savings balance observations and explicit interest without inventing principal movements or complete daily history.
-- [ ] Reconciliation failure retains that section's previous view while valid sections publish in one consistent update with visible partial status.
-- [ ] Ignored joint/non-GBP/crypto sections cause no false coverage error; unexplained savings changes remain reviewable.
+- [x] Confirm both section-to-named-account mappings on first import and reuse only with consistent source identity; never require PDF splitting.
+- [x] Publish supplied savings balance observations and explicit interest without inventing principal movements or complete daily history.
+- [x] Reconciliation failure retains that section's previous view while valid sections publish in one consistent update with visible partial status.
+- [x] Ignored joint/non-GBP/crypto sections cause no false coverage error; unexplained savings changes remain reviewable.
 
 ## Test interface and verification
 
@@ -35,6 +35,40 @@ No transfer inference from missing savings principal rows.
 
 ## Completion evidence
 
-Not started. Record red/green commands, behavioral demo, review findings/fixes,
+Mapping: the upload form now carries an optional confirmed savings account for
+consolidated statements; the choice is remembered in session like the primary
+account and is never inferred or reassigned. A savings section without a
+confirmed mapping is deferred with `mapping_required` and the upload is `partial`
+rather than failing silently or attaching to the wrong account.
+
+Interpretation: `interpretation/revolut.py` reads the `Clearbank (GBP)` savings
+summary and its interest-only transaction page (date, gross interest, net
+interest columns), records opening/closing balances dated from the statement
+period and each explicit net-interest receipt. It never invents principal
+movements or daily completeness.
+
+Independent outcomes: sections publish independently; a valid personal section
+is committed while a failed savings section contributes no rows or balances, and
+the effective outcome is `partial` with the upload left at Needs review.
+Ignored joint/non-GBP/crypto sections still contribute nothing and do not create
+coverage errors. An unexplained savings balance change (beyond listed interest)
+is published with a visible `unexplained_savings_change` review note instead of
+fabricated rows or a silent pass.
+
+Fixture: savings section with opening £250.00, three £0.10 interest receipts and
+closing £250.30, invented and reconciled independently; a mutation raises the
+closing balance to prove the review-note path.
+
+Green: `.venv/bin/python manage.py test --noinput` → 104 tests OK;
+`./scripts/smoke.sh` → exit 0, 104 tests, `restart check ok`.
+
+Live demo: uploaded the consolidated fixture with Revolut Savings confirmed,
+released and ran the worker → `outcome: imported`; the savings account shows the
+three interest receipts with dated opening/closing balances; the personal rows
+remain on the current account; excluded sections are listed as ignored.
+
+Limits: savings evidence is interest-only by source design; mapping reuse is
+session-scoped, not yet stored per source identity; real-source accuracy remains
+a release gate. No deployment or push. Record red/green commands, behavioral demo, review findings/fixes,
 local versus actual-host results, unresolved limits and commit reference when
 available. Passing local tests alone cannot close a required real-host gate.

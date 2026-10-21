@@ -121,6 +121,7 @@ def build_result(claim: dict, parsed) -> dict:
     reconciled = bool(parsed.reconciled)
     section = {
         "name": parsed.section_name,
+        "account_role": "primary",
         "status": "ok" if reconciled else "failed",
         "account_kind_hint": parsed.account_kind_hint,
         "issues": [
@@ -158,6 +159,46 @@ def build_result(claim: dict, parsed) -> dict:
             "payments_and_credits_pence": getattr(parsed, "payments_and_credits_pence", None),
         },
     }
+    savings_section = None
+    savings = getattr(parsed, "savings", None)
+    if savings is not None and savings.recognised:
+        savings_ok = not savings.issues
+        savings_section = {
+            "name": "revolut_savings_gbp",
+            "account_role": "savings",
+            "status": "ok" if savings_ok else "failed",
+            "issues": [
+                {"code": issue.code, "message": issue.message}
+                for issue in [*savings.issues, *savings.review_notes]
+            ],
+            "transactions": [
+                {
+                    "posted_on": row.posted_on.isoformat(),
+                    "source_transaction_date": None,
+                    "description": row.description,
+                    "transaction_type": row.transaction_type,
+                    "amount_pence": row.amount_pence,
+                    "balance_pence": row.balance_pence,
+                    "page": row.page,
+                    "row": row.row,
+                    "source_text": row.source_text,
+                }
+                for row in (savings.rows if savings_ok else [])
+            ],
+            "balances": [
+                {
+                    "kind": balance.kind,
+                    "observed_on": balance.observed_on.isoformat()
+                    if balance.observed_on is not None
+                    else None,
+                    "amount_pence": balance.amount_pence,
+                }
+                for balance in savings.balances
+            ],
+            # No source-stated totals apply to an interest-only export.
+            "stated_totals": {},
+        }
+
     excluded = [
         {
             "name": excluded_section["name"],
@@ -178,7 +219,7 @@ def build_result(claim: dict, parsed) -> dict:
         "attempt": claim["attempt"],
         "outcome": "imported" if reconciled else "failed",
         "issues": section["issues"],
-        "sections": [section, *excluded],
+        "sections": [section, *([savings_section] if savings_section else []), *excluded],
     }
 
 

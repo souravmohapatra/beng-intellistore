@@ -14,6 +14,7 @@ SECTION_ACCOUNT_KINDS = {
     "lloyds_credit": "card",
     "amex": "card",
     "revolut_personal_gbp": "current",
+    "revolut_savings_gbp": "savings",
 }
 MAX_TRANSACTIONS_PER_SECTION = 5000
 MAX_AMOUNT_PENCE = 10**12
@@ -79,6 +80,16 @@ def apply_result(job, body: dict) -> PublicationOutcome:
         status = section.get("status")
         if status == "ignored":
             continue
+        if status == "ok" and section.get("account_role") == "savings" and upload.savings_account is None:
+            deferred += 1
+            server_issues.append(
+                {
+                    "section": section["name"],
+                    "code": "mapping_required",
+                    "message": "Choose the savings account for this consolidated statement.",
+                }
+            )
+            continue
         if status == "deferred":
             deferred += 1
             server_issues.append(
@@ -114,27 +125,28 @@ def publish_section(upload, section: dict) -> None:
     expected_kind = SECTION_ACCOUNT_KINDS.get(name)
     if expected_kind is None:
         raise SectionRejected("unsupported_section", f"Section {name} is not supported.")
-    if expected_kind != upload.account.kind:
+    account = _section_account(upload, section)
+    if expected_kind != account.kind:
         raise SectionRejected(
             "account_identity_mismatch",
             f"This {name.replace('_', ' ')} statement does not match the selected "
-            f"{upload.account.get_kind_display().lower()} account.",
+            f"{account.get_kind_display().lower()} account.",
         )
 
     rows = [_transaction_fields(row) for row in section.get("transactions", [])]
-    if not rows:
+    balances = [_balance_fields(balance) for balance in section.get("balances", [])]
+    if not rows and not (expected_kind == "savings" and balances):
         raise SectionRejected("empty_section", f"Section {name} contained no transactions.")
     if len(rows) > MAX_TRANSACTIONS_PER_SECTION:
         raise SectionRejected("section_too_large", f"Section {name} has too many transactions.")
     if len({(row["page"], row["row"]) for row in rows}) != len(rows):
         raise SectionRejected("duplicate_source_row", "Two rows share a source location.")
 
-    balances = [_balance_fields(balance) for balance in section.get("balances", [])]
     _check_reconciliation(rows, balances, section)
 
     for row in rows:
         Transaction.objects.create(
-            account=upload.account,
+            account=account,
             upload=upload,
             posted_on=row["posted_on"],
             source_transaction_date=row["source_transaction_date"],
@@ -148,12 +160,24 @@ def publish_section(upload, section: dict) -> None:
         )
     for balance in balances:
         BalanceObservation.objects.create(
-            account=upload.account,
+            account=account,
             upload=upload,
             kind=balance["kind"],
             observed_on=balance["observed_on"],
             amount_pence=balance["amount_pence"],
         )
+
+
+def _section_account(upload, section: dict):
+    """Resolve the confirmed named account for a section without reassigning."""
+    if section.get("account_role") == "savings":
+        if upload.savings_account is None:
+            raise SectionRejected(
+                "mapping_required",
+                "Choose the savings account for this consolidated statement.",
+            )
+        return upload.savings_account
+    return upload.account
 
 
 def _transaction_fields(row: dict) -> dict:
@@ -226,10 +250,16 @@ def _check_reconciliation(rows: list[dict], balances: list[dict], section: dict)
             "The section has no opening and closing balance evidence; nothing was imported.",
         )
 
-    card_section = SECTION_ACCOUNT_KINDS.get(section["name"]) == "card"
+    section_kind = SECTION_ACCOUNT_KINDS.get(section["name"])
+    card_section = section_kind == "card"
+    savings_section = section_kind == "savings"
     has_running_balances = any(row["balance_pence"] is not None for row in rows)
 
-    if card_section and not has_running_balances:
+    if savings_section:
+        # Interest-only exports cannot prove principal movements; the supplied
+        # anchors stand and any unexplained change is reported by the worker.
+        total = opening["amount_pence"] + sum(row["amount_pence"] for row in rows)
+    elif card_section and not has_running_balances:
         # Card statements state only debt anchors; validate the debt equation.
         total = (
             opening["amount_pence"]
@@ -253,7 +283,7 @@ def _check_reconciliation(rows: list[dict], balances: list[dict], section: dict)
             previous = row["balance_pence"]
         total = previous
 
-    if total != closing["amount_pence"]:
+    if not savings_section and total != closing["amount_pence"]:
         raise SectionRejected(
             "reconciliation_failed",
             f"Opening plus rows gives {total} pence, not the stated "

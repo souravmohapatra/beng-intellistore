@@ -10,7 +10,7 @@ from jobs.models import Job
 from ledger.models import Original, Upload
 
 
-def accept_upload(*, account, filename: str, data: bytes) -> Upload:
+def accept_upload(*, account, filename: str, data: bytes, savings_account=None) -> Upload:
     """Preserve ``data`` locally and record a receipt for it.
 
     Inspection runs before storage, so an unacceptable file leaves no trace. The
@@ -33,6 +33,7 @@ def accept_upload(*, account, filename: str, data: bytes) -> Upload:
         upload = Upload.objects.create(
             original=original,
             account=account,
+            savings_account=savings_account,
             filename=Path(filename).name or "statement",
             status=inspection.status,
             review_note=_identity_note(stored.sha256, account),

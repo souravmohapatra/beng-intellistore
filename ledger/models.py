@@ -66,6 +66,14 @@ class Upload(models.Model):
     account = models.ForeignKey(
         Account, on_delete=models.PROTECT, related_name="uploads"
     )
+    # Confirmed secondary mapping for consolidated sources (e.g. Revolut savings).
+    savings_account = models.ForeignKey(
+        Account,
+        on_delete=models.PROTECT,
+        related_name="savings_uploads",
+        null=True,
+        blank=True,
+    )
     filename = models.CharField(max_length=255)
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING

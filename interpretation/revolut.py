@@ -30,6 +30,8 @@ PERSONAL_GBP = "Personal Account (GBP)"
 TRANSACTION_HEADING = "Transaction statement"
 SUMMARY_HEADING = "Current Accounts Summaries"
 SAVINGS_HEADING = "Savings Accounts Summaries"
+SAVINGS_TRANSACTIONS = "Savings Accounts Transaction Statements"
+SAVINGS_DATE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{2})$")
 CRYPTO_HEADING = "Crypto Summaries"
 
 EXCLUDED_SECTIONS = (
@@ -37,7 +39,6 @@ EXCLUDED_SECTIONS = (
     ("personal_account_sek", PERSONAL_GBP.replace("GBP", "SEK"), "ignored"),
     ("joint_account_gbp", "Joint Account (GBP)", "ignored"),
     ("crypto", CRYPTO_HEADING, "ignored"),
-    ("savings_account_gbp", SAVINGS_HEADING, "deferred"),
 )
 EXCLUSION_REASONS = {
     "ignored": "Excluded section: only personal GBP is in scope.",
@@ -51,7 +52,7 @@ class ParsedTransaction:
     description: str
     transaction_type: str
     amount_pence: int
-    balance_pence: int
+    balance_pence: int | None
     page: int
     row: int
     source_text: str
@@ -71,6 +72,21 @@ class Issue:
 
 
 @dataclass
+class SavingsResult:
+    recognised: bool = False
+    rows: list[ParsedTransaction] | None = None
+    balances: list[BalanceAnchor] | None = None
+    issues: list[Issue] | None = None
+    review_notes: list[Issue] | None = None
+
+    def __post_init__(self):
+        self.rows = [] if self.rows is None else self.rows
+        self.balances = [] if self.balances is None else self.balances
+        self.issues = [] if self.issues is None else self.issues
+        self.review_notes = [] if self.review_notes is None else self.review_notes
+
+
+@dataclass
 class ParseResult:
     recognised: bool
     section_name: str = SECTION_NAME
@@ -79,6 +95,7 @@ class ParseResult:
     balances: list[BalanceAnchor] | None = None
     issues: list[Issue] | None = None
     excluded_sections: list[dict] | None = None
+    savings: SavingsResult | None = None
     reconciled: bool = False
     opening_pence: int | None = None
     closing_pence: int | None = None
@@ -109,14 +126,23 @@ def parse_pages(pages: list[list[tuple[float, float, str]]]) -> ParseResult:
         if any(heading in text for text in page_texts)
     ]
 
+    savings = SavingsResult(recognised=any(SAVINGS_HEADING in text for text in page_texts))
     for page_number, tokens in enumerate(pages, start=1):
         text = page_texts[page_number - 1]
-        if PERSONAL_GBP not in text:
-            continue
-        if TRANSACTION_HEADING in text:
-            _parse_transaction_page(tokens, page_number, result)
-        elif SUMMARY_HEADING in text:
-            _parse_summary_page(tokens, result, period_start, period_end)
+        if PERSONAL_GBP in text:
+            if TRANSACTION_HEADING in text:
+                _parse_transaction_page(tokens, page_number, result)
+            elif SUMMARY_HEADING in text:
+                _parse_summary_page(tokens, result, period_start, period_end)
+        if savings.recognised:
+            if SAVINGS_TRANSACTIONS in text:
+                _parse_savings_transactions(tokens, page_number, period_start, period_end, savings)
+            elif SAVINGS_HEADING in text:
+                _parse_savings_summary(tokens, period_start, period_end, savings)
+
+    if savings.recognised:
+        _validate_savings(savings)
+        result.savings = savings
 
     _validate(result)
     return result
@@ -139,6 +165,84 @@ def _statement_period(page_texts) -> tuple[date | None, date | None]:
         except ValueError:
             return None, None
     return None, None
+
+
+def _parse_savings_summary(tokens, period_start, period_end, savings: SavingsResult) -> None:
+    for _y, text in _lines(tokens):
+        if text.startswith("Opening balance"):
+            amount = _trailing_amount(text)
+            if amount is not None and not any(b.kind == "opening" for b in savings.balances):
+                savings.balances.append(BalanceAnchor("opening", amount, period_start))
+        elif text.startswith("Closing balance"):
+            amount = _trailing_amount(text)
+            if amount is not None and not any(b.kind == "closing" for b in savings.balances):
+                savings.balances.append(BalanceAnchor("closing", amount, period_end))
+
+
+def _parse_savings_transactions(tokens, page_number, period_start, period_end, savings: SavingsResult) -> None:
+    for x, y, text in sorted(tokens, key=lambda token: -token[1]):
+        if x > 70:
+            continue
+        match = SAVINGS_DATE.match(text.strip())
+        if not match:
+            continue
+        month, day, year = (int(part) for part in match.groups())
+        try:
+            posted = date(2000 + year, month, day)
+        except ValueError:
+            savings.issues.append(
+                Issue("invalid_transaction_date", f"Unreadable savings date on page {page_number}.")
+            )
+            continue
+        if period_start and period_end and not (period_start <= posted <= period_end):
+            savings.issues.append(
+                Issue("date_outside_period", f"Savings row {posted} is outside the period.")
+            )
+            continue
+        net = next(
+            (
+                _gbp_pence(value)
+                for tx, ty, value in tokens
+                if tx >= 500 and abs(ty - y) <= 3.0
+            ),
+            None,
+        )
+        if net is None:
+            savings.issues.append(
+                Issue("malformed_transaction_row", f"Unreadable net interest on page {page_number}.")
+            )
+            continue
+        savings.rows.append(
+            ParsedTransaction(
+                posted_on=posted,
+                description="Gross Interest",
+                transaction_type="Interest",
+                amount_pence=net,
+                balance_pence=None,
+                page=page_number,
+                row=sum(1 for row in savings.rows if row.page == page_number) + 1,
+                source_text=f"{text} Gross Interest {net}",
+            )
+        )
+
+
+def _validate_savings(savings: SavingsResult) -> None:
+    opening = next((b for b in savings.balances if b.kind == "opening"), None)
+    closing = next((b for b in savings.balances if b.kind == "closing"), None)
+    if opening is None:
+        savings.issues.append(Issue("missing_opening_balance", "No savings opening balance was found."))
+    if closing is None:
+        savings.issues.append(Issue("missing_closing_balance", "No savings closing balance was found."))
+    if opening is not None and closing is not None:
+        expected = opening.amount_pence + sum(row.amount_pence for row in savings.rows)
+        if expected != closing.amount_pence:
+            savings.review_notes.append(
+                Issue(
+                    "unexplained_savings_change",
+                    "Savings balances changed beyond the listed interest; principal movements "
+                    "are not evidenced by this export.",
+                )
+            )
 
 
 def _parse_summary_page(tokens, result: ParseResult, period_start, period_end) -> None:

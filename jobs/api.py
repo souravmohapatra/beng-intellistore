@@ -71,10 +71,10 @@ def _effective_outcome(outcome: str, publication) -> str:
     """Record what publication achieved, not what the worker claimed."""
     if outcome != "imported":
         return outcome
-    if publication.rejected:
-        return "failed"
-    if publication.deferred:
+    if publication.committed and (publication.rejected or publication.deferred):
         return "partial"
+    if publication.rejected or publication.deferred:
+        return "failed"
     if publication.status != Upload.Status.IMPORTED:
         return "failed"
     return "imported"

@@ -426,7 +426,7 @@ def revolut_pages(include_savings: bool = True) -> list[list[tuple[float, float,
         (40, 596, "Opening balance"),
         (120, 596, "£250.00"),
         (40, 578, "Closing balance"),
-        (120, 578, "£251.20"),
+        (120, 578, "£250.30"),
     ]
     crypto_summary = [
         (40, 688, "Crypto Summaries"),
@@ -466,9 +466,46 @@ def revolut_pages(include_savings: bool = True) -> list[list[tuple[float, float,
         (40, 614, "Transaction statement"),
         *_revolut_row(564, "Aug 9, 2026", "Joint Shop", "Merchant", "-£20.00", "£70.00"),
     ]
+    savings_transactions = [
+        (40, 688, "Savings Accounts Transaction Statements"),
+        (40, 650, "Clearbank (GBP)"),
+        (40, 614, "Transaction statement (only interest receipt)"),
+        (40, 590, "Date"),
+        (89, 590, "Description"),
+        (173, 590, "AER"),
+        (210, 590, "Gross interest"),
+        (293, 590, "Taxes withheld"),
+        (382, 590, "Other taxes"),
+        (451, 590, "Fees"),
+        (511, 590, "Net interest"),
+        (40, 577, "8/1/26"),
+        (89, 577, "Gross Interest"),
+        (173, 577, "1.00%"),
+        (210, 577, "£0.10"),
+        (293, 577, "£0.00"),
+        (382, 577, "£0.00"),
+        (451, 577, "£0.00"),
+        (533, 577, "£0.10"),
+        (40, 558, "8/2/26"),
+        (89, 558, "Gross Interest"),
+        (173, 558, "1.00%"),
+        (210, 558, "£0.10"),
+        (293, 558, "£0.00"),
+        (382, 558, "£0.00"),
+        (451, 558, "£0.00"),
+        (533, 558, "£0.10"),
+        (40, 540, "8/3/26"),
+        (89, 540, "Gross Interest"),
+        (173, 540, "1.00%"),
+        (210, 540, "£0.10"),
+        (293, 540, "£0.00"),
+        (382, 540, "£0.00"),
+        (451, 540, "£0.00"),
+        (533, 540, "£0.10"),
+    ]
     pages = [personal_summary, usd_summary, joint_summary]
     if include_savings:
-        pages.append(savings_summary)
+        pages.extend([savings_summary, savings_transactions])
     pages.extend([crypto_summary, personal_transactions, usd_transactions, joint_transactions])
     header = [
         (40.0, 756.8, "Custom Statement"),
