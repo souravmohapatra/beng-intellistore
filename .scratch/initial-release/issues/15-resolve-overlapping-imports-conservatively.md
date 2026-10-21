@@ -35,13 +35,20 @@ No fuzzy tuple-only auto-deduplication or invented source identifiers.
 
 ## Completion evidence
 
-Identical originals: publication checks for an already-imported upload with the
-same original SHA-256 and the same account mapping (primary and savings). A
-match returns outcome `duplicate`, sets the receipt to “Duplicate (already
-imported)” with an `already_imported` issue, and adds no financial effects; both
-receipts and the preserved original remain. The same bytes mapped to a different
-named account still import (intake already warns about the earlier mapping) and
-are never silently relocated.
+Identical originals: deduplication is per committed account section, not per
+receipt. A `PublishedSection` record (original + section name + resolved account)
+is written when a section commits; re-uploading the same bytes skips sections
+already committed for that account and publishes previously failed or deferred
+ones. Only when nothing new commits is the outcome `duplicate`, with an
+`already_imported` issue; both receipts and the preserved original remain. The
+same bytes mapped to a different named account still import (intake already
+warns) and are never silently relocated.
+
+Partial retries: a Revolut import that committed personal rows while savings
+failed can be retried from the same bytes — personal rows stay at four and the
+retry adds only the three interest rows; likewise a deferred savings section can
+be completed after the mapping is confirmed without repeating the personal
+section. Both regressions are in the suite.
 
 Different originals: rows from another original with the same account, posting
 date, amount and description are flagged `needs_review` on both sides and the

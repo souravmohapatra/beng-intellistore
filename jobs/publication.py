@@ -7,7 +7,7 @@ commit independently, and an unvalidated section contributes no financial facts.
 from dataclasses import dataclass
 from datetime import date
 
-from jobs.models import SourceMapping
+from jobs.models import PublishedSection, SourceMapping
 from ledger.models import BalanceObservation, DuplicateMatch, Transaction, Upload
 
 SECTION_ACCOUNT_KINDS = {
@@ -73,19 +73,6 @@ def apply_result(job, body: dict) -> PublicationOutcome:
         return PublicationOutcome(Upload.Status.NEEDS_REVIEW, 0, 0, 0)
 
     upload = job.upload
-    if _already_imported(upload):
-        body.setdefault("server_issues", []).append(
-            {
-                "section": "duplicate_original",
-                "code": "already_imported",
-                "message": (
-                    "These exact bytes were already imported for the same account "
-                    "mapping; the receipt is kept but no financial effects were added."
-                ),
-            }
-        )
-        return PublicationOutcome(Upload.Status.DUPLICATE, 0, 0, 0)
-
     identity = body.get("source_identity") or ""
     mapping = SourceMapping.objects.filter(source_identity=identity).first() if identity else None
     if mapping is not None and not _mapping_consistent(mapping, upload, body):
@@ -104,7 +91,11 @@ def apply_result(job, body: dict) -> PublicationOutcome:
     committed = 0
     rejected = 0
     deferred = 0
+    duplicate_sections = 0
     server_issues = body.setdefault("server_issues", [])
+    prior_sections = PublishedSection.objects.filter(
+        upload__original_id=upload.original_id
+    ).exclude(upload=upload)
 
     for section in body["sections"]:
         status = section.get("status")
@@ -130,6 +121,30 @@ def apply_result(job, body: dict) -> PublicationOutcome:
                 }
             )
             continue
+        if status == "ok":
+            try:
+                section_account = _section_account(upload, section)
+            except SectionRejected as exc:
+                rejected += 1
+                server_issues.append(
+                    {"section": section["name"], "code": exc.code, "message": exc.message}
+                )
+                continue
+            if prior_sections.filter(
+                name=section["name"], account=section_account
+            ).exists():
+                duplicate_sections += 1
+                server_issues.append(
+                    {
+                        "section": section["name"],
+                        "code": "already_imported_section",
+                        "message": (
+                            "These bytes were already committed for this account "
+                            "section; no duplicate effects were added."
+                        ),
+                    }
+                )
+                continue
         try:
             publish_section(upload, section)
             committed += 1
@@ -139,11 +154,12 @@ def apply_result(job, body: dict) -> PublicationOutcome:
                 {"section": section["name"], "code": exc.code, "message": exc.message}
             )
 
-    status = (
-        Upload.Status.IMPORTED
-        if committed and not rejected and not deferred
-        else Upload.Status.NEEDS_REVIEW
-    )
+    if committed and not rejected and not deferred:
+        status = Upload.Status.IMPORTED
+    elif duplicate_sections and not committed and not rejected and not deferred:
+        status = Upload.Status.DUPLICATE
+    else:
+        status = Upload.Status.NEEDS_REVIEW
     if identity and committed and not rejected:
         _store_mapping(identity, upload, mapping, body)
 
@@ -230,6 +246,9 @@ def publish_section(upload, section: dict) -> None:
             source_text=row["source_text"],
         ))
     _flag_overlap_candidates(created)
+    PublishedSection.objects.get_or_create(
+        upload=upload, name=name, defaults={"account": account}
+    )
     for balance in balances:
         BalanceObservation.objects.create(
             account=account,
@@ -238,17 +257,6 @@ def publish_section(upload, section: dict) -> None:
             observed_on=balance["observed_on"],
             amount_pence=balance["amount_pence"],
         )
-
-
-def _already_imported(upload) -> bool:
-    prior = Upload.objects.filter(
-        original_id=upload.original_id, status=Upload.Status.IMPORTED
-    ).exclude(pk=upload.pk)
-    return any(
-        item.account_id == upload.account_id
-        and (item.savings_account_id or None) == (upload.savings_account_id or None)
-        for item in prior
-    )
 
 
 def _flag_overlap_candidates(created) -> None:

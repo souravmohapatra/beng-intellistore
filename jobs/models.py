@@ -138,3 +138,28 @@ class SourceMapping(models.Model):
 
     def __str__(self) -> str:
         return self.source_identity
+
+
+class PublishedSection(models.Model):
+    """A committed account section, used to avoid duplicating valid sections.
+
+    Deduplication is per original and section account, so retrying a partially
+    published import can add previously failed sections without repeating ones
+    that already committed.
+    """
+
+    upload = models.ForeignKey(
+        "ledger.Upload", on_delete=models.CASCADE, related_name="published_sections"
+    )
+    name = models.CharField(max_length=64)
+    account = models.ForeignKey(
+        "ledger.Account", on_delete=models.PROTECT, related_name="published_sections"
+    )
+    published_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["upload", "name"], name="one_section_record_per_upload"
+            )
+        ]
