@@ -6,11 +6,12 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
-from django.http import FileResponse, Http404
+from django.core.paginator import Paginator
+from django.http import FileResponse, Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.utils import timezone
-from django.views.generic import DetailView, ListView
+from django.views.generic import DetailView, ListView, TemplateView
 
 from intake.accept import accept_upload
 from intake.inspect import FileTooLarge, IntakeRejected
@@ -26,6 +27,7 @@ from reporting.history import (
     net_cash_history,
 )
 from reporting.totals import compute_totals
+from reporting.transactions import METRIC_LABELS, PAGE_SIZE, metric_entries, search_transactions
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
 LAST_SAVINGS_SESSION_KEY = "intake.savings_by_primary_account"
@@ -144,6 +146,68 @@ class AccountTransactionsView(LoginRequiredMixin, DetailView):
             account=self.object
         ).select_related("upload")
         context["balances"] = BalanceObservation.objects.filter(account=self.object)
+        return context
+
+
+class MetricDrilldownView(LoginRequiredMixin, TemplateView):
+    """Rows contributing to one dashboard metric, with period context."""
+
+    template_name = "ledger/metric.html"
+
+    def get(self, request, *args, **kwargs):
+        if request.GET.get("metric", "spending") not in METRIC_LABELS:
+            return HttpResponseBadRequest("Unknown metric")
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        metric = self.request.GET.get("metric", "spending")
+        period_start, period_end, period_error = _selected_period(self.request)
+        entries, total, exclusions = metric_entries(metric, period_start, period_end)
+        page = Paginator(entries, PAGE_SIZE).get_page(self.request.GET.get("page"))
+        context.update(
+            {
+                "metric": metric,
+                "metric_label": METRIC_LABELS[metric],
+                "period_start": period_start,
+                "period_end": period_end,
+                "period_error": period_error,
+                "page": page,
+                "total_display": format_pence(total),
+                "exclusions": exclusions,
+                "period_query": (
+                    f"start={period_start.isoformat()}&end={period_end.isoformat()}"
+                ),
+            }
+        )
+        return context
+
+
+class SearchView(LoginRequiredMixin, TemplateView):
+    """Simple original-description search with optional period scoping."""
+
+    template_name = "ledger/search.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        query = (self.request.GET.get("q") or "").strip()
+        period_start = period_end = None
+        if query:
+            start = self.request.GET.get("start")
+            end = self.request.GET.get("end")
+            if start and end:
+                try:
+                    period_start = date.fromisoformat(start)
+                    period_end = date.fromisoformat(end)
+                except ValueError:
+                    period_start = period_end = None
+            rows = search_transactions(query, period_start, period_end)
+            context["page"] = Paginator(rows, PAGE_SIZE).get_page(
+                self.request.GET.get("page")
+            )
+        context["query"] = query
+        context["period_start"] = period_start
+        context["period_end"] = period_end
         return context
 
 

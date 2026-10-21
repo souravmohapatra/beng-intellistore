@@ -1,6 +1,6 @@
 # 13: Search descriptions and drill into metric evidence
 
-Status: ready-for-agent
+Status: done
 Approval: ticket breakdown approved by Sourav
 Blocked by: 11
 Parent: [First-release specification](../spec.md)
@@ -13,10 +13,10 @@ A user opens contributing transactions from a metric or searches original descri
 
 ## Acceptance criteria
 
-- [ ] Search matches original name/description text, not model-normalized merchant guesses.
-- [ ] Metric drill-down explains included/excluded/provisional rows and retains selected reporting period.
-- [ ] Every result reaches authenticated supporting source evidence; unauthorized access remains denied.
-- [ ] Results remain usable for a large result set without requiring all records in one browser view.
+- [x] Search matches original name/description text, not model-normalized merchant guesses.
+- [x] Metric drill-down explains included/excluded/provisional rows and retains selected reporting period.
+- [x] Every result reaches authenticated supporting source evidence; unauthorized access remains denied.
+- [x] Results remain usable for a large result set without requiring all records in one browser view.
 
 ## Test interface and verification
 
@@ -35,6 +35,31 @@ No conversational/semantic search or unsolicited advanced filtering.
 
 ## Completion evidence
 
-Not started. Record red/green commands, behavioral demo, review findings/fixes,
+Search: `/search/?q=` matches the original transaction description only
+(case-insensitive substring), optionally scoped by `start`/`end`; category and
+transaction type are not searched. Results show date, account, original
+description, normalized amount and a link to the authenticated original; 50 per
+page with counts.
+
+Drill-down: dashboard metric links open `/transactions/?metric=…` with the
+selected period. Each row shows why it is included (card purchase increases
+debt, refund reverses spending, withdrawal, conversion out/back, identified
+income, cash leaving a current account), its contribution and a source link. The
+page states how many rows were excluded for unresolved classification (totals
+provisional) and how many do not contribute to the metric; totals equal the
+reporting totals for the same period. An unknown metric returns 400; anonymous
+access redirects to login.
+
+Green: `.venv/bin/python manage.py test --noinput` → 156 tests OK;
+`./scripts/smoke.sh` → exit 0, 156 tests, `restart check ok`.
+
+Live demo: `?metric=spending&start=2026-08-01&end=2026-08-31` listed the
+contributing rows with explanations, showed 3 unresolved classifications and 5
+non-contributing rows, and totalled £2,301.20; searching `coffee` returned three
+original descriptions across Lloyds Current, Lloyds Credit and Amex with source
+links.
+
+Limits: search is a substring scan (no index) — performance is ticket 26; page
+size is fixed at 50; no advanced/semantic filters. No deployment or push. Record red/green commands, behavioral demo, review findings/fixes,
 local versus actual-host results, unresolved limits and commit reference when
 available. Passing local tests alone cannot close a required real-host gate.

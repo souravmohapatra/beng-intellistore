@@ -44,9 +44,21 @@
       <table>
         <caption>Posting-period totals</caption>
         <tbody>
-          <tr><th scope="row">Spending</th><td>{{ spending_display }}</td></tr>
-          <tr><th scope="row">Income</th><td>{{ income_display }}</td></tr>
-          <tr><th scope="row">Cash outgoing</th><td>{{ cash_outgoing_display }}</td></tr>
+          <tr>
+            <th scope="row">Spending</th>
+            <td>{{ spending_display }}</td>
+            <td><a href="{% url 'ledger:metric' %}?metric=spending&start={{ report.period_start|date:'Y-m-d' }}&end={{ report.period_end|date:'Y-m-d' }}">evidence</a></td>
+          </tr>
+          <tr>
+            <th scope="row">Income</th>
+            <td>{{ income_display }}</td>
+            <td><a href="{% url 'ledger:metric' %}?metric=income&start={{ report.period_start|date:'Y-m-d' }}&end={{ report.period_end|date:'Y-m-d' }}">evidence</a></td>
+          </tr>
+          <tr>
+            <th scope="row">Cash outgoing</th>
+            <td>{{ cash_outgoing_display }}</td>
+            <td><a href="{% url 'ledger:metric' %}?metric=cash_outgoing&start={{ report.period_start|date:'Y-m-d' }}&end={{ report.period_end|date:'Y-m-d' }}">evidence</a></td>
+          </tr>
           <tr>
             <th scope="row">Net cash position</th>
             <td>{% if net_cash_display %}{{ net_cash_display }}{% else %}Unknown{% endif %}</td>

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Search — Statement Intelligence{% endblock %}
+{% block content %}
+  <h1>Search transactions</h1>
+  <form method="get" action="{% url 'ledger:search' %}">
+    <p>
+      <label>Description contains <input type="search" name="q" value="{{ query }}"></label>
+      <label>From <input type="date" name="start" value="{{ period_start|date:'Y-m-d' }}"></label>
+      <label>To <input type="date" name="end" value="{{ period_end|date:'Y-m-d' }}"></label>
+      <button type="submit">Search</button>
+    </p>
+  </form>
+
+  {% if query %}
+    {% if period_start and period_end %}
+      <p>
+        Within {{ period_start|date:"Y-m-d" }} to {{ period_end|date:"Y-m-d" }}.
+      </p>
+    {% endif %}
+    {% if page.object_list %}
+      <p>{{ page.paginator.count }} matching transaction(s).</p>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Posted</th>
+            <th scope="col">Account</th>
+            <th scope="col">Description</th>
+            <th scope="col">Amount</th>
+            <th scope="col">Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for transaction in page.object_list %}
+            <tr>
+              <td>{{ transaction.posted_on|date:"Y-m-d" }}</td>
+              <td>{{ transaction.account.name }}</td>
+              <td>{{ transaction.description }}</td>
+              <td>{{ transaction.amount_display }}</td>
+              <td>
+                <a href="{% url 'ledger:upload_original' transaction.upload_id %}">open source</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p>
+        Page {{ page.number }} of {{ page.paginator.num_pages }}.
+        {% if page.has_previous %}
+          <a href="?q={{ query|urlencode }}{% if period_start %}&start={{ period_start|date:'Y-m-d' }}&end={{ period_end|date:'Y-m-d' }}{% endif %}&page={{ page.previous_page_number }}">Previous</a>
+        {% endif %}
+        {% if page.has_next %}
+          <a href="?q={{ query|urlencode }}{% if period_start %}&start={{ period_start|date:'Y-m-d' }}&end={{ period_end|date:'Y-m-d' }}{% endif %}&page={{ page.next_page_number }}">Next</a>
+        {% endif %}
+      </p>
+    {% else %}
+      <p>No transactions match that description.</p>
+    {% endif %}
+  {% endif %}
+{% endblock %}

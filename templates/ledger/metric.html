@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ metric_label }} — Statement Intelligence{% endblock %}
+{% block content %}
+  <h1>{{ metric_label }}</h1>
+  <p>
+    Reporting period {{ period_start|date:"Y-m-d" }} to {{ period_end|date:"Y-m-d" }}.
+    Total: {{ total_display }}.
+  </p>
+  {% if period_error %}<p role="alert">{{ period_error }}</p>{% endif %}
+
+  {% if exclusions.unclassified %}
+    <p role="alert">
+      {{ exclusions.unclassified }} transaction(s) with an unresolved classification
+      are excluded from this total, which is therefore provisional.
+    </p>
+  {% endif %}
+  {% if exclusions.other %}
+    <p>{{ exclusions.other }} other transaction(s) do not contribute to this metric.</p>
+  {% endif %}
+
+  {% if page.object_list %}
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Posted</th>
+          <th scope="col">Account</th>
+          <th scope="col">Description</th>
+          <th scope="col">Why it counts</th>
+          <th scope="col">Contribution</th>
+          <th scope="col">Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in page.object_list %}
+          <tr>
+            <td>{{ entry.transaction.posted_on|date:"Y-m-d" }}</td>
+            <td>{{ entry.transaction.account.name }}</td>
+            <td>{{ entry.transaction.description }}</td>
+            <td>{{ entry.explanation }}</td>
+            <td>{{ entry.contribution_display }}</td>
+            <td>
+              <a href="{% url 'ledger:upload_original' entry.transaction.upload_id %}">open source</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p>
+      Page {{ page.number }} of {{ page.paginator.num_pages }}.
+      {% if page.has_previous %}
+        <a href="?metric={{ metric }}&{{ period_query }}&page={{ page.previous_page_number }}">Previous</a>
+      {% endif %}
+      {% if page.has_next %}
+        <a href="?metric={{ metric }}&{{ period_query }}&page={{ page.next_page_number }}">Next</a>
+      {% endif %}
+    </p>
+  {% else %}
+    <p>No transactions contribute to this metric in the selected period.</p>
+  {% endif %}
+
+  <p>
+    <a href="{% url 'ledger:overview' %}?{{ period_query }}">Back to the dashboard</a>
+  </p>
+{% endblock %}
