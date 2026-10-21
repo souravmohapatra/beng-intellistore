@@ -8,6 +8,7 @@ from django.db import DatabaseError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
+from django.utils import timezone
 from django.views.generic import DetailView, ListView
 
 from intake.accept import accept_upload
@@ -16,6 +17,7 @@ from intake.storage import StorageUnavailable
 from jobs.models import Job
 from ledger.forms import UploadForm
 from ledger.models import Account, BalanceObservation, Transaction, Upload
+from reporting.totals import compute_totals
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
 LAST_SAVINGS_SESSION_KEY = "intake.last_savings_account_id"
@@ -29,6 +31,28 @@ class AccountOverview(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         return Account.objects.all()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        period_end = timezone.localdate()
+        period_start = period_end.replace(year=period_end.year - 1) + timezone.timedelta(days=1)
+        report = compute_totals(period_start, period_end)
+        context["report"] = report
+        context["spending_display"] = _format_pence(report.spending_pence)
+        context["income_display"] = _format_pence(report.income_pence)
+        context["cash_outgoing_display"] = _format_pence(report.cash_outgoing_pence)
+        context["net_cash_display"] = (
+            None
+            if report.net_cash_pence is None
+            else _format_pence(report.net_cash_pence)
+        )
+        return context
+
+
+def _format_pence(amount_pence: int) -> str:
+    sign = "-" if amount_pence < 0 else ""
+    pence = abs(amount_pence)
+    return f"{sign}£{pence // 100:,}.{pence % 100:02d}"
 
 
 class AccountTransactionsView(LoginRequiredMixin, DetailView):

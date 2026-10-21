@@ -23,6 +23,37 @@
 
   <section aria-labelledby="dashboard-heading">
     <h2 id="dashboard-heading">Dashboard</h2>
-    <p>No reporting period has evidence yet. Upload a statement to begin.</p>
+    {% if report.has_evidence %}
+      <p>
+        Reporting period {{ report.period_start|date:"Y-m-d" }} to
+        {{ report.period_end|date:"Y-m-d" }}.
+      </p>
+      <table>
+        <caption>Posting-period totals</caption>
+        <tbody>
+          <tr><th scope="row">Spending</th><td>{{ spending_display }}</td></tr>
+          <tr><th scope="row">Income</th><td>{{ income_display }}</td></tr>
+          <tr><th scope="row">Cash outgoing</th><td>{{ cash_outgoing_display }}</td></tr>
+          <tr>
+            <th scope="row">Net cash position</th>
+            <td>{% if net_cash_display %}{{ net_cash_display }}{% else %}Unknown{% endif %}</td>
+          </tr>
+        </tbody>
+      </table>
+      {% if report.provisional %}
+        <p role="alert">
+          Provisional: {{ report.unclassified }} transaction(s) have an unresolved
+          classification and are excluded from these totals.
+        </p>
+      {% endif %}
+      {% if report.net_cash_provisional %}
+        <p role="alert">
+          Net cash is incomplete: no balance evidence for
+          {{ report.missing_balance_accounts|join:", " }}.
+        </p>
+      {% endif %}
+    {% else %}
+      <p>No reporting period has evidence yet. Upload a statement to begin.</p>
+    {% endif %}
   </section>
 {% endblock %}
