@@ -218,6 +218,8 @@ def build_result(claim: dict, parsed) -> dict:
         "version": claim["result_version"],
         "attempt": claim["attempt"],
         "outcome": "imported" if reconciled else "failed",
+        "source_identity": getattr(parsed, "source_identity", ""),
+        "savings_source_identity": getattr(parsed, "savings_source_identity", ""),
         "issues": section["issues"],
         "sections": [section, *([savings_section] if savings_section else []), *excluded],
     }

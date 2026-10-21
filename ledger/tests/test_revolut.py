@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from interpretation.revolut import parse_pages
-from jobs.models import WorkerCredential
+from jobs.models import SourceMapping, WorkerCredential
 from ledger.models import Account, AccountKind, BalanceObservation, Transaction, Upload
 from ledger.tests.statement_fixtures import revolut_pages
 from ledger.tests.support import UploadSetupMixin
@@ -102,10 +102,17 @@ class RevolutPublicationTests(UploadSetupMixin, TestCase):
             HTTP_AUTHORIZATION=f"Bearer {self.token}",
         )
 
-    def import_statement(self, include_savings=True, account=None, savings_account=None):
+    def import_statement(
+        self,
+        include_savings=True,
+        account=None,
+        savings_account=None,
+        pages=None,
+    ):
         from ledger.tests.statement_fixtures import positioned_statement_pdf
 
-        pdf = positioned_statement_pdf(revolut_pages(include_savings=include_savings))
+        selected_pages = pages or revolut_pages(include_savings=include_savings)
+        pdf = positioned_statement_pdf(selected_pages)
         self.upload(
             pdf,
             filename="revolut.pdf",
@@ -114,7 +121,7 @@ class RevolutPublicationTests(UploadSetupMixin, TestCase):
         )
         self.client.post(reverse("jobs:process_now"))
         claim = self.api("jobs:claim", None).json()
-        parsed = parse_pages(revolut_pages(include_savings=include_savings))
+        parsed = parse_pages(selected_pages)
         return self.api("jobs:result", build_result(claim, parsed), args=[claim["job"]])
 
     def test_personal_gbp_is_imported_and_savings_keeps_the_receipt_incomplete(self):
@@ -217,6 +224,73 @@ class RevolutPublicationTests(UploadSetupMixin, TestCase):
 
         page = self.client.get(reverse("ledger:uploads"))
         self.assertContains(page, f'value="{savings.pk}" selected')
+
+    def test_confirmed_mapping_stores_source_identifiers(self):
+        savings = Account.objects.create(name="Revolut Savings", kind=AccountKind.SAVINGS)
+
+        self.import_statement(savings_account=savings)
+
+        mapping = SourceMapping.objects.get()
+        parsed = parse_pages(revolut_pages())
+        self.assertEqual(mapping.primary_account, self.account)
+        self.assertEqual(mapping.savings_account, savings)
+        self.assertEqual(mapping.source_identity, parsed.source_identity)
+        self.assertEqual(
+            mapping.savings_source_identity, parsed.savings_source_identity
+        )
+
+    def test_same_source_for_a_different_primary_account_requests_review(self):
+        savings = Account.objects.create(name="Revolut Savings", kind=AccountKind.SAVINGS)
+        other = Account.objects.create(name="Other Current", kind=AccountKind.CURRENT)
+        self.import_statement(savings_account=savings)
+
+        response = self.import_statement(account=other, savings_account=savings)
+
+        self.assertEqual(response.json()["outcome"], "failed")
+        self.assertEqual(Transaction.objects.count(), 7)
+        detail = self.client.get(
+            reverse("ledger:upload_detail", args=[Upload.objects.latest("pk").pk])
+        )
+        self.assertContains(detail, "source_identity_mismatch")
+
+    def test_different_source_identifier_is_a_new_mapping(self):
+        savings = Account.objects.create(name="Revolut Savings", kind=AccountKind.SAVINGS)
+        other = Account.objects.create(name="Other Current", kind=AccountKind.CURRENT)
+        self.import_statement(savings_account=savings)
+        second_pages = revolut_pages(personal_id="GB00SYNT000000000099")
+
+        response = self.import_statement(
+            account=other, savings_account=savings, pages=second_pages
+        )
+
+        self.assertEqual(response.json()["outcome"], "imported")
+        self.assertEqual(SourceMapping.objects.count(), 2)
+        self.assertEqual(Transaction.objects.count(), 14)
+
+    def test_missing_source_identifier_does_not_authorise_reuse(self):
+        savings = Account.objects.create(name="Revolut Savings", kind=AccountKind.SAVINGS)
+        pages = [
+            [token for token in page if not token[2].startswith("GB00SYNT")]
+            for page in revolut_pages()
+        ]
+
+        response = self.import_statement(pages=pages, savings_account=savings)
+
+        self.assertEqual(response.json()["outcome"], "imported")
+        self.assertEqual(SourceMapping.objects.count(), 0)
+
+    def test_changed_savings_identifier_is_not_silently_reused(self):
+        savings = Account.objects.create(name="Revolut Savings", kind=AccountKind.SAVINGS)
+        self.import_statement(savings_account=savings)
+        changed = revolut_pages(savings_id="GB00SYNT000000000077")
+
+        response = self.import_statement(savings_account=savings, pages=changed)
+
+        self.assertEqual(response.json()["outcome"], "failed")
+        detail = self.client.get(
+            reverse("ledger:upload_detail", args=[Upload.objects.latest("pk").pk])
+        )
+        self.assertContains(detail, "source_identity_mismatch")
 
     def test_statement_without_savings_is_complete(self):
         response = self.import_statement(include_savings=False)

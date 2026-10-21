@@ -67,8 +67,18 @@ released and ran the worker → `outcome: imported`; the savings account shows t
 three interest receipts with dated opening/closing balances; the personal rows
 remain on the current account; excluded sections are listed as ignored.
 
-Limits: savings evidence is interest-only by source design; mapping reuse is
-session-scoped, not yet stored per source identity; real-source accuracy remains
-a release gate. No deployment or push. Record red/green commands, behavioral demo, review findings/fixes,
+Mapping identity (added after review): confirmed mappings are stored in
+`SourceMapping` keyed by a hash of the source's personal account identifier,
+with the savings identifier hash when a savings account is mapped. Reuse
+requires the same primary account, the same selected savings account, and
+matching identifiers; a changed primary/savings identifier requests review with
+`source_identity_mismatch` and imports nothing. A document without a labelled
+identifier authorises no reuse and stores no mapping. Tests cover stored
+identities, a different primary account, a different source identifier (new
+mapping), missing identifiers, and a changed savings identifier. Session
+preselection is scoped to the selected primary account.
+
+Limits: savings evidence is interest-only by source design; real-source accuracy
+remains a release gate. No deployment or push. Record red/green commands, behavioral demo, review findings/fixes,
 local versus actual-host results, unresolved limits and commit reference when
 available. Passing local tests alone cannot close a required real-host gate.

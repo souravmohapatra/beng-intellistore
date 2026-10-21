@@ -11,6 +11,7 @@ Description continuations sit directly below the row. Amounts carrying ``$`` or
 ``SEK`` belong to excluded sections and are not accepted as GBP facts.
 """
 
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -96,6 +97,8 @@ class ParseResult:
     issues: list[Issue] | None = None
     excluded_sections: list[dict] | None = None
     savings: SavingsResult | None = None
+    source_identity: str = ""
+    savings_source_identity: str = ""
     reconciled: bool = False
     opening_pence: int | None = None
     closing_pence: int | None = None
@@ -119,14 +122,17 @@ def parse_pages(pages: list[list[tuple[float, float, str]]]) -> ParseResult:
         return ParseResult(recognised=False)
 
     result = ParseResult(recognised=True, account_kind_hint=ACCOUNT_KIND_HINT)
+    savings = SavingsResult(recognised=any(SAVINGS_HEADING in text for text in page_texts))
     period_start, period_end = _statement_period(page_texts)
+    personal_id, savings_id = _source_ids(pages, page_texts)
+    result.source_identity = _identity("personal", personal_id)
+    result.savings_source_identity = _identity("savings", savings_id)
     result.excluded_sections = [
         {"name": name, "heading": heading, "status": status, "reason": EXCLUSION_REASONS[status]}
         for name, heading, status in EXCLUDED_SECTIONS
         if any(heading in text for text in page_texts)
     ]
 
-    savings = SavingsResult(recognised=any(SAVINGS_HEADING in text for text in page_texts))
     for page_number, tokens in enumerate(pages, start=1):
         text = page_texts[page_number - 1]
         if PERSONAL_GBP in text:
@@ -146,6 +152,53 @@ def parse_pages(pages: list[list[tuple[float, float, str]]]) -> ParseResult:
 
     _validate(result)
     return result
+
+
+IBAN_PATTERN = re.compile(r"\bGB\d{2}[A-Z0-9]{10,30}\b")
+SAVINGS_HEADING_MARKER = "Savings Accounts Summaries"
+
+
+def _identity(kind: str, identifier: str | None) -> str:
+    if not identifier:
+        return ""
+    return hashlib.sha256(f"revolut|{kind}|{identifier}".encode("utf-8")).hexdigest()[:32]
+
+
+def _source_ids(pages, page_texts) -> tuple[str | None, str | None]:
+    """Extract the personal and savings account identifiers from summary pages.
+
+    Only a labelled identifier on the matching summary page is accepted; a bare
+    IBAN elsewhere (or an ambiguous one) never authorises mapping reuse.
+    """
+    personal = None
+    savings = None
+    for page, text in zip(pages, page_texts):
+        if "Savings Accounts Summaries" in text:
+            candidate = _labelled_iban(page, ("IBAN",))
+            if candidate and savings is None:
+                savings = candidate
+        elif PERSONAL_GBP in text and "Current Accounts Summaries" in text:
+            candidate = _labelled_iban(page, ("IBAN",))
+            if candidate and personal is None:
+                personal = candidate
+    return personal, savings
+
+
+def _labelled_iban(tokens, labels) -> str | None:
+    label_ys = [y for _x, y, text in tokens if any(label in text for label in labels)]
+    if not label_ys:
+        return None
+    matches = [
+        (y, text)
+        for _x, y, text in tokens
+        if IBAN_PATTERN.fullmatch(text.strip())
+    ]
+    if not matches:
+        return None
+    nearest = min(matches, key=lambda item: min(abs(item[0] - ly) for ly in label_ys))
+    if min(abs(nearest[0] - ly) for ly in label_ys) > 30:
+        return None
+    return nearest[1]
 
 
 def _page_text(tokens) -> str:

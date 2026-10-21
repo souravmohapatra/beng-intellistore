@@ -28,7 +28,7 @@ from reporting.history import (
 from reporting.totals import compute_totals
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
-LAST_SAVINGS_SESSION_KEY = "intake.last_savings_account_id"
+LAST_SAVINGS_SESSION_KEY = "intake.savings_by_primary_account"
 
 
 class AccountOverview(LoginRequiredMixin, ListView):
@@ -194,7 +194,9 @@ class UploadListView(LoginRequiredMixin, View):
         request.session[LAST_ACCOUNT_SESSION_KEY] = account.pk
         savings = form.cleaned_data.get("savings_account")
         if savings is not None:
-            request.session[LAST_SAVINGS_SESSION_KEY] = savings.pk
+            remembered = dict(request.session.get(LAST_SAVINGS_SESSION_KEY, {}))
+            remembered[str(account.pk)] = savings.pk
+            request.session[LAST_SAVINGS_SESSION_KEY] = remembered
         return redirect("ledger:upload_detail", pk=upload.pk)
 
     @staticmethod
@@ -203,7 +205,8 @@ class UploadListView(LoginRequiredMixin, View):
         account_id = request.session.get(LAST_ACCOUNT_SESSION_KEY)
         if account_id and Account.objects.filter(pk=account_id).exists():
             initial["account"] = account_id
-        savings_id = request.session.get(LAST_SAVINGS_SESSION_KEY)
+        remembered = request.session.get(LAST_SAVINGS_SESSION_KEY, {})
+        savings_id = remembered.get(str(initial.get("account"))) if initial.get("account") else None
         if savings_id and Account.objects.filter(pk=savings_id).exists():
             initial["savings_account"] = savings_id
         return initial

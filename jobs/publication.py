@@ -7,6 +7,7 @@ commit independently, and an unvalidated section contributes no financial facts.
 from dataclasses import dataclass
 from datetime import date
 
+from jobs.models import SourceMapping
 from ledger.models import BalanceObservation, Transaction, Upload
 
 SECTION_ACCOUNT_KINDS = {
@@ -71,6 +72,21 @@ def apply_result(job, body: dict) -> PublicationOutcome:
     if outcome == "failed":
         return PublicationOutcome(Upload.Status.NEEDS_REVIEW, 0, 0, 0)
 
+    identity = body.get("source_identity") or ""
+    mapping = SourceMapping.objects.filter(source_identity=identity).first() if identity else None
+    if mapping is not None and not _mapping_consistent(mapping, upload, body):
+        body.setdefault("server_issues", []).append(
+            {
+                "section": "source_mapping",
+                "code": "source_identity_mismatch",
+                "message": (
+                    "This source was previously confirmed against different named "
+                    "accounts; confirm the mapping before importing."
+                ),
+            }
+        )
+        return PublicationOutcome(Upload.Status.NEEDS_REVIEW, 0, 1, 0)
+
     committed = 0
     rejected = 0
     deferred = 0
@@ -114,7 +130,47 @@ def apply_result(job, body: dict) -> PublicationOutcome:
         if committed and not rejected and not deferred
         else Upload.Status.NEEDS_REVIEW
     )
+    if identity and committed and not rejected:
+        _store_mapping(identity, upload, mapping, body)
+
     return PublicationOutcome(status, committed, rejected, deferred)
+
+
+def _mapping_consistent(mapping, upload, body) -> bool:
+    if mapping.primary_account_id != upload.account_id:
+        return False
+    if (
+        upload.savings_account_id is not None
+        and mapping.savings_account_id is not None
+        and mapping.savings_account_id != upload.savings_account_id
+    ):
+        return False
+    reported_savings = body.get("savings_source_identity") or ""
+    if (
+        upload.savings_account_id is not None
+        and mapping.savings_source_identity
+        and reported_savings
+        and mapping.savings_source_identity != reported_savings
+    ):
+        return False
+    return True
+
+
+def _store_mapping(identity: str, upload, mapping, body) -> None:
+    savings = upload.savings_account or (mapping.savings_account if mapping else None)
+    savings_identity = body.get("savings_source_identity") or (
+        mapping.savings_source_identity if mapping else ""
+    )
+    if upload.savings_account is None and mapping is None:
+        savings_identity = ""
+    SourceMapping.objects.update_or_create(
+        source_identity=identity,
+        defaults={
+            "primary_account": upload.account,
+            "savings_account": savings,
+            "savings_source_identity": savings_identity,
+        },
+    )
 
 
 def publish_section(upload, section: dict) -> None:

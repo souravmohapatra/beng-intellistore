@@ -394,11 +394,17 @@ def _revolut_row(y, date_text, description, category, money, balance,
     ]
 
 
-def revolut_pages(include_savings: bool = True) -> list[list[tuple[float, float, str]]]:
+def revolut_pages(
+    include_savings: bool = True,
+    personal_id: str = "GB00SYNT000000000001",
+    savings_id: str = "GB00SYNT000000000002",
+) -> list[list[tuple[float, float, str]]]:
     """Consolidated-shaped pages: personal GBP plus excluded sections."""
     personal_summary = [
         (40, 688, "Current Accounts Summaries"),
         (40, 650, "Personal Account (GBP)"),
+        (40, 632, "Account Number (GB IBAN)"),
+        (300, 632, personal_id),
         (40, 614, "Deposit value"),
         (40, 596, "Opening balance"),
         (120, 596, "£500.00"),
@@ -422,6 +428,8 @@ def revolut_pages(include_savings: bool = True) -> list[list[tuple[float, float,
     savings_summary = [
         (40, 688, "Savings Accounts Summaries"),
         (40, 650, "Clearbank (GBP)"),
+        (40, 632, "Account number (IBAN)"),
+        (300, 632, savings_id),
         (40, 614, "Savings account details"),
         (40, 596, "Opening balance"),
         (120, 596, "£250.00"),

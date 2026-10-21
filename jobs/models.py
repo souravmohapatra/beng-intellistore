@@ -112,3 +112,29 @@ class JobResult(models.Model):
     payload = models.JSONField()
     payload_sha256 = models.CharField(max_length=64)
     applied_at = models.DateTimeField(auto_now_add=True)
+
+
+class SourceMapping(models.Model):
+    """Confirmed account mapping for one recognised source identity.
+
+    Identities are structural (layout family plus the section set), never
+    account numbers. A changed identity must be confirmed again rather than
+    silently reusing an earlier savings mapping.
+    """
+
+    source_identity = models.CharField(max_length=200, unique=True)
+    primary_account = models.ForeignKey(
+        "ledger.Account", on_delete=models.PROTECT, related_name="primary_mappings"
+    )
+    savings_account = models.ForeignKey(
+        "ledger.Account",
+        on_delete=models.PROTECT,
+        related_name="savings_mappings",
+        null=True,
+        blank=True,
+    )
+    savings_source_identity = models.CharField(max_length=64, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return self.source_identity
