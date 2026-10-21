@@ -1,71 +1,25 @@
 """Behavioral tests for durable original preservation and retrieval."""
 
-import shutil
-import tempfile
 from pathlib import Path
 
-from django.contrib.auth import get_user_model
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import OperationalError, connection
-from django.test import TestCase, TransactionTestCase, override_settings
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
 from ledger.models import Account, AccountKind, Original, Upload
+from ledger.tests.fixtures import text_pdf
+from ledger.tests.support import UploadSetupMixin
 
-# Synthetic bytes, invented for these tests. Digest and size were established
-# independently with `shasum -a 256` and `wc -c`, not by the application.
-FIXTURE = (
-    b"%PDF-1.7\n"
-    b"% synthetic lloyds current fixture\n"
-    b"1 0 obj\n"
-    b"<<>>\n"
-    b"endobj\n"
-    b"trailer\n"
-    b"<<>>\n"
-    b"%%EOF\n"
-)
-FIXTURE_SHA256 = "59353dc5157b272da4fa20bc691a16af66fd7a4772952edba876e657cfacbd2f"
-FIXTURE_BYTES = 83
-
-
-class UploadSetupMixin:
-    def setUp(self):
-        self.data_dir = Path(tempfile.mkdtemp())
-        self.settings_override = override_settings(DATA_DIR=self.data_dir)
-        self.settings_override.enable()
-        self.addCleanup(self.settings_override.disable)
-        self.addCleanup(shutil.rmtree, self.data_dir, ignore_errors=True)
-
-        self.account = Account.objects.create(
-            name="Lloyds Current", kind=AccountKind.CURRENT
-        )
-        self.user = get_user_model().objects.create_user(
-            username="sourav", password="local-dev-password"
-        )
-        self.client.force_login(self.user)
-
-    def upload(self, data=FIXTURE, filename="statement.pdf", account=None):
-        return self.client.post(
-            reverse("ledger:uploads"),
-            {
-                "account": (account or self.account).pk,
-                "file": SimpleUploadedFile(
-                    filename, data, content_type="application/pdf"
-                ),
-            },
-        )
-
-    def stored_blobs(self):
-        return [
-            path
-            for path in (self.data_dir / "originals").rglob("*")
-            if path.is_file()
-        ]
+# A valid PDF with selectable text. Digest and size were established outside the
+# application with `shasum -a 256` and `wc -c`.
+FIXTURE = text_pdf()
+FIXTURE_SHA256 = "b4d0614ed0c91f71d89b2131562dbca7016bdc58cdfdf99820b57be2bd8764ba"
+FIXTURE_BYTES = 590
 
 
 class PreservationTests(UploadSetupMixin, TestCase):
     def test_acceptance_stores_exact_bytes_and_receipt(self):
-        response = self.upload()
+        response = self.upload(FIXTURE)
 
         upload = Upload.objects.get()
         self.assertRedirects(
@@ -73,7 +27,7 @@ class PreservationTests(UploadSetupMixin, TestCase):
         )
         self.assertEqual(upload.account, self.account)
         self.assertEqual(upload.filename, "statement.pdf")
-        self.assertEqual(upload.status, Upload.Status.PENDING)
+        self.assertEqual(upload.status, Upload.Status.UNSUPPORTED)
         self.assertEqual(upload.original.sha256, FIXTURE_SHA256)
         self.assertEqual(upload.original.byte_size, FIXTURE_BYTES)
         self.assertEqual(
@@ -81,7 +35,7 @@ class PreservationTests(UploadSetupMixin, TestCase):
         )
 
     def test_receipt_is_listed_and_original_reopens_with_exact_bytes(self):
-        self.upload()
+        self.upload(FIXTURE)
         upload = Upload.objects.get()
 
         listing = self.client.get(reverse("ledger:uploads"))
@@ -96,7 +50,7 @@ class PreservationTests(UploadSetupMixin, TestCase):
         self.assertEqual(b"".join(original.streaming_content), FIXTURE)
 
     def test_anonymous_visitors_cannot_read_receipts_or_originals(self):
-        self.upload()
+        self.upload(FIXTURE)
         upload = Upload.objects.get()
         self.client.logout()
 
@@ -115,8 +69,8 @@ class PreservationTests(UploadSetupMixin, TestCase):
             name="Revolut Savings", kind=AccountKind.SAVINGS
         )
 
-        self.upload(filename="current.pdf")
-        self.upload(filename="savings.pdf", account=savings)
+        self.upload(FIXTURE, filename="current.pdf")
+        self.upload(FIXTURE, filename="savings.pdf", account=savings)
 
         self.assertEqual(Original.objects.count(), 1)
         receipts = list(Upload.objects.order_by("pk"))
@@ -135,7 +89,7 @@ class StorageFailureTests(UploadSetupMixin, TestCase):
         # A real filesystem failure: the originals directory path is a file.
         (self.data_dir / "originals").write_bytes(b"not a directory")
 
-        response = self.upload()
+        response = self.upload(FIXTURE)
 
         self.assertEqual(response.status_code, 503)
         self.assertContains(response, "could not be preserved", status_code=503)
@@ -163,7 +117,7 @@ class RecordFailureTests(UploadSetupMixin, TransactionTestCase):
 
     def test_receipt_failure_reports_no_success_and_keeps_source_bytes(self):
         with connection.execute_wrapper(self.FailingReceiptInsert()):
-            response = self.upload()
+            response = self.upload(FIXTURE)
 
         self.assertEqual(response.status_code, 503)
         self.assertContains(response, "could not be recorded", status_code=503)

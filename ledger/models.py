@@ -56,6 +56,7 @@ class Upload(models.Model):
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
+        UNSUPPORTED = "unsupported", "Unsupported"
 
     original = models.ForeignKey(
         Original, on_delete=models.PROTECT, related_name="uploads"
@@ -67,6 +68,7 @@ class Upload(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING
     )
+    review_note = models.TextField(blank=True)
     received_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

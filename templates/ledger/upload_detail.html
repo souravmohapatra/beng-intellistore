@@ -2,11 +2,20 @@
 {% block title %}{{ upload.filename }} — Statement Intelligence{% endblock %}
 {% block content %}
   <h1>{{ upload.filename }}</h1>
+  {% if upload.review_note %}
+    <p role="alert">{{ upload.review_note }}</p>
+  {% endif %}
   <dl>
     <dt>Named account</dt>
     <dd>{{ upload.account.name }} ({{ upload.account.get_kind_display }})</dd>
     <dt>Status</dt>
     <dd>{{ upload.get_status_display }}</dd>
+    {% if upload.status == "unsupported" %}
+      <dd>
+        This layout is not a supported statement format yet, so no transactions
+        were imported. The original is preserved for review.
+      </dd>
+    {% endif %}
     <dt>Received</dt>
     <dd>{{ upload.received_at|date:"Y-m-d H:i:s T" }}</dd>
     <dt>Preserved original</dt>

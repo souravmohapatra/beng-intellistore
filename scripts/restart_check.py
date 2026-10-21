@@ -31,9 +31,11 @@ from django.urls import reverse  # noqa: E402
 
 from ledger.models import Account, AccountKind, Upload  # noqa: E402
 
-FIXTURE = b"%PDF-1.7\n% restart-check fixture\n%%EOF\n"
-FIXTURE_SHA256 = "844a22500189e0d58a2689895f92acab4ad66f8ca859b5a171a37d6d6387e68a"
-FIXTURE_BYTES = 39
+# A readable, currently unsupported export; digest and size were established
+# outside the application with `shasum -a 256` and `wc -c`.
+FIXTURE = b"Date,Description,Amount\n2026-08-01,Coffee,-3.20\n"
+FIXTURE_SHA256 = "491997df56edfe6c1f165b29c3c5f899f88ae59feed9fe8fa79a962af634acc2"
+FIXTURE_BYTES = 48
 USERNAME = "restart-check"
 PASSWORD = "local-restart-check-password"
 
@@ -58,7 +60,7 @@ def upload(client: Client) -> str:
         {
             "account": account.pk,
             "file": SimpleUploadedFile(
-                "restart.pdf", FIXTURE, content_type="application/pdf"
+                "restart.csv", FIXTURE, content_type="text/csv"
             ),
         },
     )
@@ -83,7 +85,7 @@ def verify(client: Client, upload_id: str) -> None:
         raise SystemExit("restart check: original could not be reopened")
 
     listing = client.get(reverse("ledger:uploads"))
-    if "restart.pdf" not in listing.content.decode():
+    if "restart.csv" not in listing.content.decode():
         raise SystemExit("restart check: receipt missing from listing")
     print("restart check ok")
 

@@ -27,6 +27,10 @@ self-service registration. Define named accounts in the Django admin
 (`/admin/`) with kinds current, card or savings.
 
 Accepted originals are stored under `var/` (`INTELLISTORE_DATA_DIR` overrides).
+Intake checks content, not extensions: PDFs (max 100 pages) and UTF-8 text/CSV up
+to 20 MiB are preserved; damaged, password-protected or image-only PDFs give a
+specific rejection. No statement layout is implemented yet, so receipts currently
+show **Unsupported** rather than claiming an import.
 
 Stop the database with `docker compose down`. This keeps the development volume.
 `docker compose down --volumes` **destroys** the development database and is only

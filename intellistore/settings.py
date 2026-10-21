@@ -97,6 +97,13 @@ DATA_DIR = Path(_env("INTELLISTORE_DATA_DIR", str(BASE_DIR / "var")))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Invalid user-supplied PDFs are expected; pypdf's warnings would log contents-adjacent detail.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "loggers": {"pypdf": {"level": "ERROR"}},
+}
+
 # Private single-user access: one login, no self-service registration.
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"

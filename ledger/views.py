@@ -11,9 +11,12 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from intake.accept import accept_upload
+from intake.inspect import FileTooLarge, IntakeRejected
 from intake.storage import StorageUnavailable
 from ledger.forms import UploadForm
 from ledger.models import Account, Upload
+
+LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
 
 
 class AccountOverview(LoginRequiredMixin, ListView):
@@ -32,7 +35,7 @@ class UploadListView(LoginRequiredMixin, View):
     template_name = "ledger/uploads.html"
 
     def get(self, request):
-        return self._render(request, UploadForm())
+        return self._render(request, UploadForm(initial=self._initial(request)))
 
     def post(self, request):
         form = UploadForm(request.POST, request.FILES)
@@ -40,40 +43,53 @@ class UploadListView(LoginRequiredMixin, View):
             return self._render(request, form)
 
         submitted = form.cleaned_data["file"]
+        account = form.cleaned_data["account"]
         try:
             upload = accept_upload(
-                account=form.cleaned_data["account"],
+                account=account,
                 filename=submitted.name,
                 data=submitted.read(),
-                content_type=submitted.content_type,
             )
+        except FileTooLarge as exc:
+            return self._render(request, form, status=413, intake_error=str(exc))
+        except IntakeRejected as exc:
+            return self._render(request, form, status=400, intake_error=str(exc))
         except StorageUnavailable:
             return self._render(
                 request,
                 form,
                 status=503,
-                storage_error="The original could not be preserved. Nothing was accepted.",
+                intake_error="The original could not be preserved. Nothing was accepted.",
             )
         except DatabaseError:
             return self._render(
                 request,
                 form,
                 status=503,
-                storage_error=(
+                intake_error=(
                     "The receipt could not be recorded. The source bytes were preserved; "
                     "please retry."
                 ),
             )
+
+        request.session[LAST_ACCOUNT_SESSION_KEY] = account.pk
         return redirect("ledger:upload_detail", pk=upload.pk)
 
-    def _render(self, request, form, status=200, storage_error=None):
+    @staticmethod
+    def _initial(request):
+        account_id = request.session.get(LAST_ACCOUNT_SESSION_KEY)
+        if account_id and Account.objects.filter(pk=account_id).exists():
+            return {"account": account_id}
+        return {}
+
+    def _render(self, request, form, status=200, intake_error=None):
         return render(
             request,
             self.template_name,
             {
                 "form": form,
                 "uploads": Upload.objects.select_related("account", "original"),
-                "storage_error": storage_error,
+                "intake_error": intake_error,
             },
             status=status,
         )
