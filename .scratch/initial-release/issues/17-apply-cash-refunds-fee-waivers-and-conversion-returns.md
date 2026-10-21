@@ -36,8 +36,9 @@ No additional investment/crypto classification policy beyond confirmed review ru
 ## Completion evidence
 
 Machine rules: cash withdrawals remain spending and cash outgoing with no cash
-ledger; negative fee charges (type or description containing FEE) are spending
-and outgoing; refunds continue to reduce spending without becoming income;
+ledger; negative fee charges are spending and outgoing only when the type is an
+explicit fee or the description contains a whole FEE token (a substring like
+COFFEE does not match; such rows stay provisional); refunds continue to reduce spending without becoming income;
 GBP conversions count only with `Exchanged to` evidence — out is spending and
 outgoing, back to GBP reduces spending in its own period and records incoming
 cash without income.
@@ -64,6 +65,9 @@ back in August → July spending/outgoing 2500, August spending −1000, income 
 
 Green: `.venv/bin/python manage.py test --noinput` → 201 tests OK;
 `./scripts/smoke.sh` → exit 0, 201 tests, `restart check ok`.
+
+A counterexample regression keeps an unresolved “COFFEE WALLET TRANSFER” debit
+out of spending while an explicit Fee type still counts.
 
 Limits: candidates depend on reversal wording; unmatched or ambiguous returns
 stay in review rather than becoming income; no cash-wallet ledger or

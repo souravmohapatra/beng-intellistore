@@ -88,6 +88,26 @@ class FeeWaiverTests(ReversalTestCase):
         self.assertEqual(ReversalLink.objects.count(), 1)
 
 
+class FeeTokenTests(ReversalTestCase):
+    def test_coffee_is_not_a_fee(self):
+        self.txn(8, 4, "COFFEE WALLET TRANSFER", "Other", -300)
+
+        august = self.totals(8)
+
+        self.assertEqual(august.spending_pence, 0)
+        self.assertEqual(august.cash_outgoing_pence, 0)
+        self.assertEqual(august.unclassified, 1)
+        self.assertTrue(august.provisional)
+
+    def test_explicit_fee_type_is_spending_even_without_the_word(self):
+        self.txn(8, 4, "MONTHLY CHARGE", "Fee", -300)
+
+        august = self.totals(8)
+
+        self.assertEqual(august.spending_pence, 300)
+        self.assertEqual(august.cash_outgoing_pence, 300)
+
+
 class ReturnedPaymentTests(ReversalTestCase):
     def test_returned_payment_reverses_spending_but_preserves_gross_outgoing(self):
         payment = self.txn(7, 10, "CARD PAYMENT", "Card payment", -2000)

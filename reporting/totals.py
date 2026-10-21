@@ -11,6 +11,7 @@ interest is income; a cash withdrawal is spending and outgoing.
 """
 
 from dataclasses import dataclass, field
+import re
 from datetime import date
 
 from ledger.models import Account, AccountKind, BalanceObservation, DuplicateMatch, Transaction
@@ -104,7 +105,11 @@ def classify_source(transaction: Transaction) -> RowEffect | None:
             return RowEffect(spending_pence=-amount) if amount > 0 else None
         # GBP converted out is spending and outgoing; the foreign leg is ignored.
         return RowEffect(spending_pence=-amount, cash_outgoing_pence=-amount) if amount < 0 else None
-    if transaction_type in SPENDING_TYPES or (amount < 0 and "FEE" in description):
+    fee_charge = amount < 0 and (
+        transaction_type.strip().lower() in {"fee", "fees"}
+        or bool(re.search(r"\bFEES?\b", description))
+    )
+    if transaction_type in SPENDING_TYPES or fee_charge:
         if amount < 0:
             return RowEffect(spending_pence=-amount, cash_outgoing_pence=-amount)
         return None
