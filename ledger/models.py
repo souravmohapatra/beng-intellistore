@@ -217,3 +217,31 @@ class DuplicateMatch(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["transaction"], name="one_duplicate_decision")
         ]
+
+
+class TransferLink(models.Model):
+    """A user-confirmed relationship between two tracked-account entries.
+
+    Both transactions and their provenance remain; the link changes reporting
+    semantics only (a repayment is not spending, an own transfer is neither
+    spending nor income nor external outgoing).
+    """
+
+    class Kind(models.TextChoices):
+        TRANSFER = "transfer", "Own-account transfer"
+        REPAYMENT = "repayment", "Card repayment"
+
+    transaction_a = models.ForeignKey(
+        Transaction, on_delete=models.CASCADE, related_name="transfer_links_a"
+    )
+    transaction_b = models.ForeignKey(
+        Transaction, on_delete=models.CASCADE, related_name="transfer_links_b"
+    )
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["transaction_a"], name="one_link_for_a"),
+            models.UniqueConstraint(fields=["transaction_b"], name="one_link_for_b"),
+        ]

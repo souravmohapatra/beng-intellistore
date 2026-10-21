@@ -26,6 +26,7 @@ from ledger.models import (
     Correction,
     DuplicateMatch,
     Transaction,
+    TransferLink,
     Upload,
 )
 from reporting.history import (
@@ -44,6 +45,7 @@ from reporting.totals import (
     effect_for_classification,
 )
 from reporting.transactions import METRIC_LABELS, PAGE_SIZE, metric_entries, search_transactions
+from reporting.transfers import candidates_for
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
 LAST_SAVINGS_SESSION_KEY = "intake.savings_by_primary_account"
@@ -271,6 +273,54 @@ class ReviewDetailView(LoginRequiredMixin, View):
                     needs_review=False
                 )
             return redirect("ledger:review_detail", pk=pk)
+        if action == "link":
+            peer_id = request.POST.get("peer")
+            kind = request.POST.get("kind")
+            with transaction_db.atomic():
+                locked = list(
+                    Transaction.objects.select_for_update()
+                    .filter(pk__in=[transaction.pk, peer_id])
+                    .order_by("pk")
+                )
+                if len(locked) != 2:
+                    return self._render(
+                        request, pk, error="That pairing no longer exists.", status=400
+                    )
+                left, right = locked
+                if kind not in TransferLink.Kind.values:
+                    return self._render(
+                        request, pk, error="Unknown link kind.", status=400
+                    )
+                if TransferLink.objects.filter(
+                    transaction_a_id__in=[left.pk, right.pk]
+                ).exists() or TransferLink.objects.filter(
+                    transaction_b_id__in=[left.pk, right.pk]
+                ).exists():
+                    return self._render(
+                        request,
+                        pk,
+                        error="One of these entries already has a confirmed link.",
+                        status=400,
+                    )
+                matches = [
+                    candidate
+                    for candidate in candidates_for(left)
+                    if candidate["transaction"].pk == right.pk
+                ]
+                if not matches or matches[0]["kind"] != kind:
+                    return self._render(
+                        request,
+                        pk,
+                        error="That pairing is no longer a valid candidate.",
+                        status=400,
+                    )
+                TransferLink.objects.create(
+                    transaction_a_id=left.pk, transaction_b_id=right.pk, kind=kind
+                )
+                Transaction.objects.filter(pk__in=[left.pk, right.pk]).update(
+                    needs_review=False
+                )
+            return redirect("ledger:review_detail", pk=pk)
         if action == "keep_both":
             transaction.needs_review = False
             transaction.save(update_fields=["needs_review"])
@@ -347,6 +397,7 @@ class ReviewDetailView(LoginRequiredMixin, View):
             {
                 "transaction": transaction,
                 "overlap_candidates": candidates,
+                "transfer_candidates": candidates_for(transaction),
                 "duplicate_decision": transaction.duplicate_matches.first(),
                 "corrections": transaction.corrections.all(),
                 "active_correction": active,

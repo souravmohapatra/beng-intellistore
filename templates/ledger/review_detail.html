@@ -42,6 +42,35 @@
     </section>
   {% endif %}
 
+  {% if transfer_candidates %}
+    <section aria-labelledby="transfer-heading">
+      <h2 id="transfer-heading">Possible transfers or repayments</h2>
+      <p>
+        Equal amounts and nearby dates are only candidate signals; they do not
+        prove ownership or pairing. Nothing changes until you confirm.
+      </p>
+      <ul>
+        {% for candidate in transfer_candidates %}
+          <li>
+            {{ candidate.transaction.account.name }} · {{ candidate.transaction.posted_on|date:"Y-m-d" }}
+            · {{ candidate.transaction.description }} · {{ candidate.transaction.amount_display }}
+            ({{ candidate.days_apart }} day(s) apart)
+            <form method="post" action="{% url 'ledger:review_detail' transaction.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="link">
+              <input type="hidden" name="peer" value="{{ candidate.transaction.pk }}">
+              <input type="hidden" name="kind" value="{{ candidate.kind }}">
+              <button type="submit">
+                {% if candidate.kind == "repayment" %}Confirm card repayment{% else %}Confirm own-account transfer{% endif %}
+              </button>
+            </form>
+            <a href="{% url 'ledger:upload_original' candidate.transaction.upload_id %}">open other source</a>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
   {% if overlap_candidates %}
     <section aria-labelledby="overlap-heading">
       <h2 id="overlap-heading">Possible overlap</h2>

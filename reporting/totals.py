@@ -14,14 +14,9 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from ledger.models import Account, AccountKind, BalanceObservation, DuplicateMatch, Transaction
+from reporting.effects import RowEffect
 from reporting.history import latest_balances
-
-
-@dataclass
-class RowEffect:
-    spending_pence: int = 0
-    income_pence: int = 0
-    cash_outgoing_pence: int = 0
+from reporting.transfers import link_for, transfer_effect
 
 
 @dataclass
@@ -59,6 +54,9 @@ def classify(transaction: Transaction) -> RowEffect | None:
     """Confirmed corrections take precedence over machine-derived effects."""
     if transaction.duplicate_matches.all():
         return RowEffect()
+    link = link_for(transaction)
+    if link is not None:
+        return transfer_effect(transaction, link)
     correction = active_correction(transaction)
     if correction is not None:
         return effect_for_classification(correction.classification, transaction)
@@ -155,7 +153,12 @@ def compute_totals(period_start: date, period_end: date) -> TotalsReport:
 
     rows = (
         Transaction.objects.select_related("account")
-        .prefetch_related("corrections", "duplicate_matches")
+        .prefetch_related(
+            "corrections",
+            "duplicate_matches",
+            "transfer_links_a",
+            "transfer_links_b",
+        )
         .filter(posted_on__gte=period_start, posted_on__lte=period_end)
     )
     for row in rows:
