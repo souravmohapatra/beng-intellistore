@@ -102,9 +102,9 @@ Chart.js; it is not a separate React application. See the
 Development is on the Mac, with as much appropriate local testing as possible.
 At meaningful milestones, perform full end-to-end checks in the actual deployment
 environment. Sourav selected Docker Desktop as the Mac test runtime for isolated
-PostgreSQL and file storage; installation, versions and readiness are not yet
-verified. Real-host acceptance remains necessary for GPU, wake, persistence and
-recovery.
+PostgreSQL and file storage; it is installed and verified with pinned
+dependencies. Real-host acceptance remains necessary for GPU, wake, persistence
+and recovery.
 
 ```mermaid
 flowchart TB

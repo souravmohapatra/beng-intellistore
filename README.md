@@ -9,12 +9,14 @@ vocabulary is in [GLOSSARY.md](GLOSSARY.md).
 ## Local development (Mac)
 
 Selected test runtime: Docker Desktop on the Mac, with PostgreSQL in Compose.
-The database listens on loopback port 55432 only and keeps its data in a
-project-scoped volume, so existing local PostgreSQL services and private data
-are untouched.
+The development database listens on loopback port 55432 only and keeps its data
+in the `beng-intellistore` Compose volume, so existing local PostgreSQL services
+and private data are untouched.
 
 ```bash
-./scripts/smoke.sh --keep     # create venv, install pins, start PostgreSQL, run tests
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+docker compose up -d --wait      # development database, port 55432
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py createsuperuser
 .venv/bin/python manage.py runserver
@@ -24,13 +26,29 @@ Then open <http://127.0.0.1:8000/>. The overview requires sign-in; there is no
 self-service registration. Define named accounts in the Django admin
 (`/admin/`) with kinds current, card or savings.
 
-Stop the isolated database with `docker compose down --volumes`.
+Accepted originals are stored under `var/` (`INTELLISTORE_DATA_DIR` overrides).
+
+Stop the database with `docker compose down`. This keeps the development volume.
+`docker compose down --volumes` **destroys** the development database and is only
+for deliberately discarding it.
+
+## Checks
+
+`./scripts/smoke.sh` creates its own venv, installs the pins, and runs the
+checks against a per-invocation Compose project, loopback port, and temporary
+data directory. It runs migrations and the test suite, then removes only its own
+resources:
+
+```bash
+./scripts/smoke.sh              # isolated; removes its database and data after
+./scripts/smoke.sh --keep       # prints the project, port and data directory it left
+```
 
 Pinned dependencies live in `requirements.txt`; `compose.yaml` pins the
-PostgreSQL image. Peer versions:
+PostgreSQL image. Verified on 2026-10-21:
 
-- Python 3.14 (Homebrew)
+- Python 3.14.7 (Homebrew)
 - Django 6.1.2
 - psycopg 3.2.13
 - PostgreSQL 17.11 (alpine image)
-- Docker Desktop 29.9.1 / Compose v5.6.0
+- Docker Desktop 4.96.0 (server 29.9.1) / Compose v5.6.0

@@ -56,6 +56,19 @@ Isolation: smoke runs under a per-invocation Compose project
 invocation's volume; verified the developer volume and its three accounts
 survived a smoke run. No host services or private data touched.
 
-Limits: local Mac evidence only; no deployment, TLS, phone layout, upload or
-worker behavior — later tickets. Fresh-checkout smoke still needs an installed
-Docker Desktop daemon. No push.
+Limits: local Mac evidence only; no deployment, TLS, phone layout or worker
+behavior — later tickets. Fresh-checkout smoke still needs an installed Docker
+Desktop daemon. No push.
+
+Fresh checkout: `git clone --branch initial-release-integration` into an empty
+directory ran `./scripts/smoke.sh` with exit 0, `Ran 6 tests`, `OK`.
+
+Review (independent agent): no auth-gating, fabricated-balance or preservation
+defect. Two must-fix findings, both docs/setup: (1) README recommended
+`docker compose down --volumes`, which destroys the development database;
+(2) `--keep` instructions implied chaining a dynamic smoke port into later
+migrate/runserver commands. Fixed in README: development uses
+`docker compose up -d --wait` on port 55432 and `docker compose down` keeps the
+volume, with volume deletion labelled destructive. Also added a real
+login-form test (wrong password rejected, correct password redirects to `/`)
+and removed stale "runtime unverified" statements from ADR/HLD/spec.

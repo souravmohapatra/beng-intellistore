@@ -13,7 +13,6 @@ Develop on the Mac and run as many appropriate tests there as possible, followed
 by full end-to-end checks in the actual deployment environment at meaningful
 milestones. Project deployment remains Docker-based. Sourav selected Docker
 Desktop as the Mac development/test runtime for isolated PostgreSQL and file
-storage. The Docker CLI was not available when checked; runtime installation and
-version pinning remain unverified and must precede PostgreSQL-dependent tests.
-Local success does not establish GPU, wake, storage, backup/recovery, or
-real-host deployment acceptance.
+storage; it was installed and verified on 2026-10-21 (Docker 29.9.1, Compose
+v5.6.0) with pinned dependencies. Local success does not establish GPU, wake,
+storage, backup/recovery, or real-host deployment acceptance.

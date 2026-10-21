@@ -117,8 +117,8 @@ August coverage.
   responsibilities, not instructions to add separate deployable services.
 - Develop on the Mac with as much appropriate local testing as possible. Actual
   deployment-host E2E checks occur at meaningful milestones. Sourav selected
-  Docker Desktop as the Mac test runtime for isolated PostgreSQL and files;
-  installation, versions and readiness remain to be verified.
+  Docker Desktop as the Mac test runtime for isolated PostgreSQL and files; it
+  is installed and verified with pinned dependencies.
 
 ### Intake, financial evidence and matching
 
