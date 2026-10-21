@@ -69,6 +69,20 @@ and ran the worker (`outcome: imported`); the account page shows seven debt
 movements with posting and purchase dates, the £400 payment credit, the £0.75
 fee, opening/closing debt and source page links.
 
+Independent review findings, all fixed with regressions: (1) independently
+inferred years could place the posting date before the purchase date — dates are
+now validated together (`transaction ≤ posting ≤ statement`) and rejected as
+`implausible_dates`; (2) `Payments received` was compared with every CR credit,
+so a merchant refund failed the statement — payments are now only required to be
+at most total credits, and the payment summary is no longer treated as a total
+credits figure; (3) repeated `Payments received` values silently overwrote each
+other — first value wins and a differing repeat raises
+`contradictory_payment_summary`; (4) a card section could publish from anchors
+alone, and row-derived debits were sent as "stated" — the worker now sends only
+source-stated values and publication requires the layout's summary (payments
+received for Lloyds Credit, payments and credits for Amex); (5) the previous
+balance was dated with the statement date.
+
 Correction after review feedback: the previous balance carries no evidenced
 date, so it is stored with an unknown observation date and displayed as
 "(date unknown)" instead of being labelled with the statement date; only the

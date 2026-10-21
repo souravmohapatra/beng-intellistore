@@ -11,6 +11,7 @@ from ledger.models import BalanceObservation, Transaction, Upload
 SECTION_ACCOUNT_KINDS = {
     "lloyds_current": "current",
     "lloyds_credit": "card",
+    "amex": "card",
 }
 MAX_TRANSACTIONS_PER_SECTION = 5000
 MAX_AMOUNT_PENCE = 10**12
@@ -233,28 +234,50 @@ def _check_reconciliation(rows: list[dict], balances: list[dict], section: dict)
         )
 
     stated = section.get("stated_totals")
-    if isinstance(stated, dict):
-        money_in = sum(row["amount_pence"] for row in rows if row["amount_pence"] > 0)
-        money_out = -sum(row["amount_pence"] for row in rows if row["amount_pence"] < 0)
-        if stated.get("money_in_pence") is not None and stated["money_in_pence"] != money_in:
+    if not isinstance(stated, dict):
+        raise SectionRejected(
+            "missing_statement_summary",
+            "The section carries no source-stated summary to validate against.",
+        )
+
+    credits = -sum(row["amount_pence"] for row in rows if row["amount_pence"] < 0)
+    debits = sum(row["amount_pence"] for row in rows if row["amount_pence"] > 0)
+    name = section["name"]
+
+    if name == "lloyds_current":
+        for key, derived in (("money_in_pence", debits), ("money_out_pence", credits)):
+            if stated.get(key) is None:
+                raise SectionRejected(
+                    "missing_statement_summary",
+                    f"The source did not state {key.replace('_pence', '').replace('_', ' ')}.",
+                )
+            if stated[key] != derived:
+                raise SectionRejected(
+                    "totals_mismatch",
+                    f"Stated {key.replace('_pence', '').replace('_', ' ')} {stated[key]} pence "
+                    f"differs from rows {derived} pence.",
+                )
+    elif name == "lloyds_credit":
+        payments = stated.get("payments_received_pence")
+        if payments is None:
             raise SectionRejected(
-                "totals_mismatch",
-                f"Stated money in {stated['money_in_pence']} pence differs from rows {money_in} pence.",
+                "missing_statement_summary",
+                "The source did not state payments received.",
             )
-        if stated.get("money_out_pence") is not None and stated["money_out_pence"] != money_out:
+        if payments > credits:
             raise SectionRejected(
                 "totals_mismatch",
-                f"Stated money out {stated['money_out_pence']} pence differs from rows {money_out} pence.",
+                f"Stated payments {payments} pence exceed the {credits} pence of credits.",
             )
-        credits = -sum(row["amount_pence"] for row in rows if row["amount_pence"] < 0)
-        debits = sum(row["amount_pence"] for row in rows if row["amount_pence"] > 0)
-        if stated.get("credits_pence") is not None and stated["credits_pence"] != credits:
+    elif name == "amex":
+        payments = stated.get("payments_and_credits_pence")
+        if payments is None:
             raise SectionRejected(
-                "totals_mismatch",
-                f"Stated credits {stated['credits_pence']} pence differ from rows {credits} pence.",
+                "missing_statement_summary",
+                "The source did not state payments and credits.",
             )
-        if stated.get("debits_pence") is not None and stated["debits_pence"] != debits:
+        if payments != credits:
             raise SectionRejected(
                 "totals_mismatch",
-                f"Stated debits {stated['debits_pence']} pence differ from rows {debits} pence.",
+                f"Stated payments and credits {payments} pence differ from rows {credits} pence.",
             )

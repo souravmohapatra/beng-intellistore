@@ -73,7 +73,7 @@ class ParseResult:
     reconciled: bool = False
     opening_pence: int | None = None
     closing_pence: int | None = None
-    credits_pence: int | None = None
+    payments_received_pence: int | None = None
     debits_pence: int | None = None
 
     def __post_init__(self):
@@ -150,7 +150,17 @@ def parse(text: str) -> ParseResult:
 
             payments = PAYMENTS_RECEIVED.match(stripped)
             if payments:
-                result.credits_pence = _maybe_pence(payments.group(1))
+                amount = _maybe_pence(payments.group(1))
+                if amount is not None:
+                    if result.payments_received_pence is None:
+                        result.payments_received_pence = amount
+                    elif result.payments_received_pence != amount:
+                        result.issues.append(
+                            Issue(
+                                "contradictory_payment_summary",
+                                "The statement repeats a different payments-received total.",
+                            )
+                        )
 
     _validate(result)
     return result
@@ -213,6 +223,16 @@ def _consume_row(row_match, page_number: int, statement_date: date | None, resul
             )
         )
         return
+    if statement_date is not None and not (transaction_date <= entered_date <= statement_date):
+        result.issues.append(
+            Issue(
+                "implausible_dates",
+                f"{row_match.group('description').strip()} has a posting date "
+                f"{entered_date.isoformat()} that does not follow its transaction date "
+                f"{transaction_date.isoformat()} within the statement period.",
+            )
+        )
+        return
 
     signed = -amount if row_match.group("cr") else amount
     result.rows.append(
@@ -243,25 +263,20 @@ def _validate(result: ParseResult) -> None:
     if not result.rows:
         result.issues.append(Issue("no_transactions", "No transaction rows were found."))
 
-    for row in result.rows:
-        if row.posted_on > row.transaction_date and (row.posted_on - row.transaction_date).days > 31:
-            result.issues.append(
-                Issue(
-                    "implausible_dates",
-                    f"{row.description} has a posting date long before its transaction date.",
-                )
-            )
-
     credits = -sum(row.amount_pence for row in result.rows if row.amount_pence < 0)
     debits = sum(row.amount_pence for row in result.rows if row.amount_pence > 0)
     result.debits_pence = debits
 
-    if result.credits_pence is not None and result.credits_pence != credits:
+    if result.payments_received_pence is None:
+        result.issues.append(
+            Issue("missing_payments_summary", "The payments-received summary was not found.")
+        )
+    elif result.payments_received_pence > credits:
         result.issues.append(
             Issue(
                 "totals_mismatch",
-                f"Stated payments received {result.credits_pence} pence differ from rows "
-                f"{credits} pence.",
+                f"Stated payments received {result.payments_received_pence} pence exceed the "
+                f"{credits} pence of credits in the rows.",
             )
         )
 

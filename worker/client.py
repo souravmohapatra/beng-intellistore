@@ -71,17 +71,34 @@ def interpret(data: bytes, content_type: str):
 
     import pypdf
 
-    from interpretation import lloyds_credit, lloyds_current
+    from interpretation import amex, lloyds_credit, lloyds_current
 
     reader = pypdf.PdfReader(io.BytesIO(data))
     if reader.is_encrypted:
         return None
+
+    positioned = amex.parse_pages([_page_tokens(page) for page in reader.pages])
+    if positioned.recognised:
+        return positioned
+
     text = "\f".join((page.extract_text() or "") for page in reader.pages)
     for parser in (lloyds_current.parse, lloyds_credit.parse):
         result = parser(text)
         if result.recognised:
             return result
     return None
+
+
+def _page_tokens(page) -> list[tuple[float, float, str]]:
+    tokens: list[tuple[float, float, str]] = []
+
+    def visitor(text, cm, tm, font_dict, font_size):
+        cleaned = (text or "").strip()
+        if cleaned:
+            tokens.append((round(tm[4], 1), round(tm[5], 1), cleaned))
+
+    page.extract_text(visitor_text=visitor)
+    return tokens
 
 
 def build_result(claim: dict, parsed) -> dict:
@@ -135,8 +152,8 @@ def build_result(claim: dict, parsed) -> dict:
         "stated_totals": {
             "money_in_pence": getattr(parsed, "money_in_pence", None),
             "money_out_pence": getattr(parsed, "money_out_pence", None),
-            "credits_pence": getattr(parsed, "credits_pence", None),
-            "debits_pence": getattr(parsed, "debits_pence", None),
+            "payments_received_pence": getattr(parsed, "payments_received_pence", None),
+            "payments_and_credits_pence": getattr(parsed, "payments_and_credits_pence", None),
         },
     }
     return {

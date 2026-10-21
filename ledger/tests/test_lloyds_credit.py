@@ -51,7 +51,7 @@ class CreditParsingTests(TestCase):
             ],
         )
         self.assertEqual((result.opening_pence, result.closing_pence), (40000, 86000))
-        self.assertEqual((result.credits_pence, result.debits_pence), (40000, 86000))
+        self.assertEqual((result.payments_received_pence, result.debits_pence), (40000, 86000))
 
     def test_fx_continuations_are_annotations_not_extra_rows(self):
         result = parse(lloyds_credit_text())
@@ -77,7 +77,66 @@ class CreditParsingTests(TestCase):
         self.assertTrue(result.reconciled, [issue.message for issue in result.issues])
         self.assertEqual(
             [(row.transaction_date, row.posted_on) for row in result.rows],
-            [(date(2026, 12, 30), date(2026, 12, 31)), (date(2027, 1, 2), date(2027, 1, 4))],
+            [
+                (date(2026, 12, 30), date(2026, 12, 31)),
+                (date(2027, 1, 2), date(2027, 1, 4)),
+                (date(2026, 12, 30), date(2027, 1, 2)),
+            ],
+        )
+
+    def test_posting_before_purchase_is_rejected(self):
+        result = parse(
+            text_with(
+                (
+                    "03 JULY 06 JULY COFFEE HOUSE GB",
+                    "03 JULY 08 SEPTEMBER COFFEE HOUSE GB",
+                )
+            )
+        )
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("implausible_dates", [issue.code for issue in result.issues])
+
+    def test_same_month_reversed_dates_are_rejected(self):
+        result = parse(
+            text_with(("03 JULY 06 JULY COFFEE HOUSE GB", "06 JULY 03 JULY COFFEE HOUSE GB"))
+        )
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("implausible_dates", [issue.code for issue in result.issues])
+
+    def test_impossible_calendar_date_is_reported(self):
+        result = parse(
+            text_with(("03 JULY 06 JULY COFFEE HOUSE GB", "31 APRIL 02 MAY COFFEE HOUSE GB"))
+        )
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("invalid_transaction_date", [issue.code for issue in result.issues])
+
+    def test_merchant_refund_does_not_break_the_payment_summary(self):
+        text = text_with(
+            (
+                "7 21 JULY 22 JULY RESTAURANT STOCKHOLM SE        64.00",
+                "7 21 JULY 22 JULY RESTAURANT STOCKHOLM SE        64.00\n"
+                "7 06 JULY 08 JULY MERCHANT REFUND        10.00CR",
+            )
+        )
+        text = text.replace("Your new balance\n860.00", "Your new balance\n850.00")
+        text = text.replace("New balance              860.00", "New balance              850.00")
+
+        result = parse(text)
+
+        self.assertTrue(result.reconciled, [issue.message for issue in result.issues])
+        self.assertEqual(result.payments_received_pence, 40000)
+
+    def test_contradictory_payment_summaries_are_reported(self):
+        result = parse(
+            text_with(("Payments received       400.00", "Payments received       399.00\nPayments received       400.00"))
+        )
+
+        self.assertFalse(result.reconciled)
+        self.assertIn(
+            "contradictory_payment_summary", [issue.code for issue in result.issues]
         )
 
     def test_missing_statement_date_makes_year_context_ambiguous(self):
@@ -151,6 +210,19 @@ class CreditPublicationTests(UploadSetupMixin, TestCase):
         self.assertContains(page, "NON-STERLING PURCHASE FEE")
         self.assertContains(page, "For credit cards")
         self.assertContains(page, "(date unknown)")
+
+    def test_section_without_a_source_summary_is_not_published(self):
+        self.upload(lloyds_credit_pdf(), filename="no-summary.pdf", account=self.card)
+        self.client.post(reverse("jobs:process_now"))
+        claim = self.api("jobs:claim", None).json()
+        parsed = parse(extract_text(lloyds_credit_pdf()))
+        payload = build_result(claim, parsed)
+        payload["sections"][0]["stated_totals"] = {}
+
+        response = self.api("jobs:result", payload, args=[claim["job"]])
+
+        self.assertEqual(response.json()["outcome"], "failed")
+        self.assertEqual(Transaction.objects.count(), 0)
 
     def test_card_statement_assigned_to_a_current_account_requests_review(self):
         response = self.import_statement(account=self.account)
