@@ -3,7 +3,7 @@
 Status: ready-for-agent
 Release: R1
 Design baseline: decisions accepted through Q76
-Implementation status: in progress (ticket 01 claimed; Mac runtime setup blocked)
+Implementation status: in progress on `initial-release-integration` — tickets 01-05 and 07-08 done; 06 blocked on deployment approval; 09-30 not started
 
 ## Problem Statement
 
