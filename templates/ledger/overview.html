@@ -103,6 +103,27 @@
       <h3>Net-cash history</h3>
       <p>Dated points only where balance evidence exists; no daily continuity is implied.</p>
       {% if history_points %}
+        <figure>
+          <svg viewBox="0 0 {{ history_chart.width }} {{ history_chart.height }}"
+               role="img"
+               aria-label="Net-cash evidence points from {{ history_chart.start|date:'Y-m-d' }} to {{ history_chart.end|date:'Y-m-d' }}"
+               style="max-width: 100%; height: auto;">
+            <line x1="{{ history_chart.padding }}" y1="{{ history_chart.height|add:'-24' }}"
+                  x2="{{ history_chart.width|add:'-24' }}" y2="{{ history_chart.height|add:'-24' }}"
+                  stroke="#888" stroke-width="1"></line>
+            {% for point in history_chart.points %}
+              <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4" fill="#2563eb">
+                <title>{{ point.observed_on|date:"Y-m-d" }}: {{ point.display }}</title>
+              </circle>
+            {% endfor %}
+            <text x="{{ history_chart.padding }}" y="{{ history_chart.height|add:'-6' }}"
+                  font-size="11" fill="#555">{{ history_chart.start|date:"Y-m-d" }}</text>
+            <text x="{{ history_chart.width|add:'-24' }}" y="{{ history_chart.height|add:'-6' }}"
+                  font-size="11" fill="#555" text-anchor="end">{{ history_chart.end|date:"Y-m-d" }}</text>
+            <text x="{{ history_chart.padding }}" y="16" font-size="11" fill="#555">highest {{ history_chart.highest_display }} · lowest {{ history_chart.lowest_display }}</text>
+          </svg>
+          <figcaption>Evidence points only; gaps are not interpolated.</figcaption>
+        </figure>
         <ul>
           {% for point in history_points %}
             <li>

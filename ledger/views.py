@@ -18,7 +18,13 @@ from intake.storage import StorageUnavailable
 from jobs.models import Job
 from ledger.forms import UploadForm
 from ledger.models import Account, BalanceObservation, Transaction, Upload
-from reporting.history import account_balance_rows, coverage_gaps, format_pence, net_cash_history
+from reporting.history import (
+    account_balance_rows,
+    chart_geometry,
+    coverage_gaps,
+    format_pence,
+    net_cash_history,
+)
 from reporting.totals import compute_totals
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
@@ -38,6 +44,7 @@ class AccountOverview(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         period_start, period_end, period_error = _selected_period(self.request)
         report = compute_totals(period_start, period_end)
+        points = net_cash_history(period_start, period_end)
         context.update(
             {
                 "report": report,
@@ -56,8 +63,9 @@ class AccountOverview(LoginRequiredMixin, ListView):
                         "net_cash_display": format_pence(point.net_cash_pence),
                         "disputed": point.disputed,
                     }
-                    for point in net_cash_history(period_start, period_end)
+                    for point in points
                 ],
+                "history_chart": chart_geometry(points, period_start, period_end),
                 "coverage_gaps": coverage_gaps(period_start, period_end),
                 "balance_rows": [
                     {

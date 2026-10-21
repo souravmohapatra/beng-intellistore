@@ -61,9 +61,12 @@ provisional and incomplete-balance alerts, the account balance table with dated
 sources, and exactly two net-cash points (1 Aug and 31 Aug) rather than a daily
 series.
 
-Limits: history renders as dated points/list, not a chart, until the responsive/
-visual slice; the 45-day gap threshold is a display heuristic awaiting review
-workflow; conflicting sources need a resolution action (ticket 14). No
-deployment or push. Record red/green commands, behavioral demo, review findings/fixes,
+Graph: the period bounds the inline SVG graph; only evidence points are plotted
+as circles (no interpolated line), with the period's start/end, highest and
+lowest net cash labelled, plus the accessible dated list as a fallback. This uses
+no new chart library, per the ticket's scope limit.
+
+Limits: the 45-day gap threshold is a display heuristic awaiting review workflow;
+conflicting sources need a resolution action (ticket 14). No deployment or push. Record red/green commands, behavioral demo, review findings/fixes,
 local versus actual-host results, unresolved limits and commit reference when
 available. Passing local tests alone cannot close a required real-host gate.

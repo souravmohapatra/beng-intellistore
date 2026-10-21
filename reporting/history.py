@@ -153,6 +153,45 @@ def account_balance_rows(period_end: date) -> list[dict]:
     return rows
 
 
+def chart_geometry(points: list[BalancePoint], period_start: date, period_end: date,
+                   width: int = 600, height: int = 180, padding: int = 24) -> dict:
+    """Map evidence points onto SVG coordinates; no interpolation between them."""
+    if not points:
+        return {"points": [], "width": width, "height": height}
+
+    span = max((period_end - period_start).days, 1)
+    values = [point.net_cash_pence for point in points]
+    lowest, highest = min(values), max(values)
+    plot_width = width - 2 * padding
+    plot_height = height - 2 * padding
+
+    mapped = []
+    for point in points:
+        x = padding + (point.observed_on - period_start).days / span * plot_width
+        if highest == lowest:
+            y = padding + plot_height / 2
+        else:
+            y = padding + (highest - point.net_cash_pence) / (highest - lowest) * plot_height
+        mapped.append(
+            {
+                "x": round(x, 1),
+                "y": round(y, 1),
+                "observed_on": point.observed_on,
+                "display": format_pence(point.net_cash_pence),
+            }
+        )
+    return {
+        "points": mapped,
+        "width": width,
+        "height": height,
+        "padding": padding,
+        "start": period_start,
+        "end": period_end,
+        "lowest_display": format_pence(lowest),
+        "highest_display": format_pence(highest),
+    }
+
+
 def format_pence(amount_pence: int) -> str:
     sign = "-" if amount_pence < 0 else ""
     pence = abs(amount_pence)

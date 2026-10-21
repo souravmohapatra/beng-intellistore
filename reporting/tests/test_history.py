@@ -110,6 +110,23 @@ class HistoryPointTests(HistoryTestCase):
         self.assertContains(page, "Coverage gap")
         self.assertContains(page, "Current")
 
+    def test_graph_plots_only_evidence_points_with_period_bounds(self):
+        self.observe(self.savings, date(2026, 8, 10), 25000)
+        self.observe(self.savings, date(2026, 8, 20), 25010)
+
+        page = self.client.get("/", {"month": "2026-08"})
+
+        self.assertContains(page, "<svg")
+        self.assertEqual(page.content.decode().count("<circle"), 2)
+        self.assertContains(page, "2026-08-01")
+        self.assertContains(page, "2026-08-31")
+        self.assertContains(page, "gaps are not interpolated")
+
+    def test_graph_is_absent_without_evidence(self):
+        page = self.client.get("/", {"month": "2026-08"})
+
+        self.assertNotContains(page, "<svg")
+
     def test_conflicting_same_date_balances_are_disputed(self):
         self.observe(self.current, date(2026, 8, 31), 100000)
         self.observe(self.current, date(2026, 8, 31), 90000)
