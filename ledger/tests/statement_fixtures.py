@@ -167,3 +167,68 @@ def lloyds_current_pdf() -> bytes:
 def extract_text(data: bytes) -> str:
     reader = pypdf.PdfReader(io.BytesIO(data))
     return "\f".join(page.extract_text() for page in reader.pages)
+
+
+def lloyds_credit_pages(statement_date: str = "07 September 2026") -> list[list[str]]:
+    """Cover + one transaction page + breakdown for the Lloyds Credit contract."""
+    return [
+        [
+            "Your credit card statement",
+            statement_date,
+            "Lloyds Bank Cashback",
+            "Credit Card",
+            "Previous balance        400.00",
+            "Payments received       400.00",
+            "To reach your account by 01 October 2026",
+            "Your new balance",
+            "860.00",
+        ],
+        [
+            "Cardholder                      MR TEST CARDHOLDER",
+            "Card Ending Date of transaction Date entered Description Amount £",
+            "BALANCE FROM PREVIOUS STATEMENT               400.00",
+            "7 30 JULY 30 JULY DIRECT DEBIT PAYMENT - THANK YOU      400.00CR",
+            "7 03 JULY 06 JULY COFFEE HOUSE GB        21.00",
+            "7 04 JULY 06 JULY SUPERMARKET LONDON GB        33.50",
+            "7 04 JULY 06 JULY NON-STERLING PURCHASE FEE         0.75",
+            "7 17 JULY 20 JULY CAFE STOCKHOLM SE       120.00",
+            "987.65SEK @ 11.30",
+            "7 21 JULY 22 JULY RESTAURANT STOCKHOLM SE        64.00",
+            "7 02 AUGUST 03 AUGUST ELECTRONICS LONDON GB       620.75",
+        ],
+        [
+            "Card Ending Date of transaction Date entered Description Amount £",
+            "Breakdown of balance",
+            "New balance              860.00",
+        ],
+    ]
+
+
+def lloyds_credit_year_boundary_pages() -> list[list[str]]:
+    """Statement dated January: December rows belong to the previous year."""
+    return [
+        [
+            "Your credit card statement",
+            "06 January 2027",
+            "Lloyds Bank Cashback",
+            "Credit Card",
+            "Payments received       0.00",
+            "Your new balance",
+            "120.00",
+        ],
+        [
+            "Card Ending Date of transaction Date entered Description Amount £",
+            "BALANCE FROM PREVIOUS STATEMENT               90.00",
+            "7 30 DECEMBER 31 DECEMBER SHOP GB        10.00",
+            "7 02 JANUARY 04 JANUARY SHOP TWO GB        20.00",
+            "New balance              120.00",
+        ],
+    ]
+
+
+def lloyds_credit_pdf(pages: list[list[str]] | None = None) -> bytes:
+    return statement_pdf(pages or lloyds_credit_pages())
+
+
+def lloyds_credit_text(pages: list[list[str]] | None = None) -> str:
+    return "\f".join("\n".join(page) for page in (pages or lloyds_credit_pages()))

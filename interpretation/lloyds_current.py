@@ -65,6 +65,7 @@ class Issue:
 @dataclass
 class ParseResult:
     recognised: bool
+    section_name: str = "lloyds_current"
     account_kind_hint: str | None = None
     rows: list[ParsedTransaction] | None = None
     balances: list[BalanceAnchor] | None = None

@@ -10,6 +10,7 @@ from ledger.models import BalanceObservation, Transaction, Upload
 
 SECTION_ACCOUNT_KINDS = {
     "lloyds_current": "current",
+    "lloyds_credit": "card",
 }
 MAX_TRANSACTIONS_PER_SECTION = 5000
 MAX_AMOUNT_PENCE = 10**12
@@ -108,6 +109,7 @@ def publish_section(upload, section: dict) -> None:
             account=upload.account,
             upload=upload,
             posted_on=row["posted_on"],
+            source_transaction_date=row["source_transaction_date"],
             description=row["description"],
             transaction_type=row["transaction_type"],
             amount_pence=row["amount_pence"],
@@ -139,8 +141,18 @@ def _transaction_fields(row: dict) -> dict:
     except (KeyError, TypeError, ValueError) as exc:
         raise SectionRejected("invalid_transaction", "A transaction entry is malformed.") from exc
 
+    source_date = row.get("source_transaction_date")
+    if source_date is not None:
+        try:
+            source_date = date.fromisoformat(str(source_date))
+        except ValueError as exc:
+            raise SectionRejected(
+                "invalid_transaction", "A transaction purchase date is malformed."
+            ) from exc
+
     return {
         "posted_on": posted_on,
+        "source_transaction_date": source_date,
         "description": str(row.get("description", ""))[:500],
         "transaction_type": str(row.get("transaction_type", ""))[:60],
         "amount_pence": amount,
@@ -185,22 +197,33 @@ def _check_reconciliation(rows: list[dict], balances: list[dict], section: dict)
             "The section has no opening and closing balance evidence; nothing was imported.",
         )
 
-    previous = opening["amount_pence"]
-    for row in rows:
-        if row["balance_pence"] is None:
-            raise SectionRejected(
-                "missing_running_balance",
-                f"No running balance accompanies the {row['posted_on'].isoformat()} row.",
-            )
-        if row["balance_pence"] - previous != row["amount_pence"]:
-            raise SectionRejected(
-                "running_balance_mismatch",
-                f"The {row['posted_on'].isoformat()} row states {row['amount_pence']} pence "
-                f"but changes the balance by {row['balance_pence'] - previous} pence.",
-            )
-        previous = row["balance_pence"]
+    card_section = SECTION_ACCOUNT_KINDS.get(section["name"]) == "card"
+    has_running_balances = any(row["balance_pence"] is not None for row in rows)
 
-    total = previous
+    if card_section and not has_running_balances:
+        # Card statements state only debt anchors; validate the debt equation.
+        total = (
+            opening["amount_pence"]
+            + sum(row["amount_pence"] for row in rows if row["amount_pence"] > 0)
+            - sum(-row["amount_pence"] for row in rows if row["amount_pence"] < 0)
+        )
+    else:
+        previous = opening["amount_pence"]
+        for row in rows:
+            if row["balance_pence"] is None:
+                raise SectionRejected(
+                    "missing_running_balance",
+                    f"No running balance accompanies the {row['posted_on'].isoformat()} row.",
+                )
+            if row["balance_pence"] - previous != row["amount_pence"]:
+                raise SectionRejected(
+                    "running_balance_mismatch",
+                    f"The {row['posted_on'].isoformat()} row states {row['amount_pence']} pence "
+                    f"but changes the balance by {row['balance_pence'] - previous} pence.",
+                )
+            previous = row["balance_pence"]
+        total = previous
+
     if total != closing["amount_pence"]:
         raise SectionRejected(
             "reconciliation_failed",
@@ -221,4 +244,16 @@ def _check_reconciliation(rows: list[dict], balances: list[dict], section: dict)
             raise SectionRejected(
                 "totals_mismatch",
                 f"Stated money out {stated['money_out_pence']} pence differs from rows {money_out} pence.",
+            )
+        credits = -sum(row["amount_pence"] for row in rows if row["amount_pence"] < 0)
+        debits = sum(row["amount_pence"] for row in rows if row["amount_pence"] > 0)
+        if stated.get("credits_pence") is not None and stated["credits_pence"] != credits:
+            raise SectionRejected(
+                "totals_mismatch",
+                f"Stated credits {stated['credits_pence']} pence differ from rows {credits} pence.",
+            )
+        if stated.get("debits_pence") is not None and stated["debits_pence"] != debits:
+            raise SectionRejected(
+                "totals_mismatch",
+                f"Stated debits {stated['debits_pence']} pence differ from rows {debits} pence.",
             )

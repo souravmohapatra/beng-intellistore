@@ -71,14 +71,17 @@ def interpret(data: bytes, content_type: str):
 
     import pypdf
 
-    from interpretation.lloyds_current import parse
+    from interpretation import lloyds_credit, lloyds_current
 
     reader = pypdf.PdfReader(io.BytesIO(data))
     if reader.is_encrypted:
         return None
     text = "\f".join((page.extract_text() or "") for page in reader.pages)
-    result = parse(text)
-    return result if result.recognised else None
+    for parser in (lloyds_current.parse, lloyds_credit.parse):
+        result = parser(text)
+        if result.recognised:
+            return result
+    return None
 
 
 def build_result(claim: dict, parsed) -> dict:
@@ -98,7 +101,7 @@ def build_result(claim: dict, parsed) -> dict:
 
     reconciled = bool(parsed.reconciled)
     section = {
-        "name": "lloyds_current",
+        "name": parsed.section_name,
         "status": "ok" if reconciled else "failed",
         "account_kind_hint": parsed.account_kind_hint,
         "issues": [
@@ -107,10 +110,12 @@ def build_result(claim: dict, parsed) -> dict:
         "transactions": [
             {
                 "posted_on": row.posted_on.isoformat(),
+                "source_transaction_date": getattr(row, "transaction_date", None)
+                and row.transaction_date.isoformat(),
                 "description": row.description,
                 "transaction_type": row.transaction_type,
                 "amount_pence": row.amount_pence,
-                "balance_pence": row.balance_pence,
+                "balance_pence": getattr(row, "balance_pence", None),
                 "page": row.page,
                 "row": row.row,
                 "source_text": row.source_text,
@@ -127,8 +132,10 @@ def build_result(claim: dict, parsed) -> dict:
             if balance.observed_on is not None
         ],
         "stated_totals": {
-            "money_in_pence": parsed.money_in_pence,
-            "money_out_pence": parsed.money_out_pence,
+            "money_in_pence": getattr(parsed, "money_in_pence", None),
+            "money_out_pence": getattr(parsed, "money_out_pence", None),
+            "credits_pence": getattr(parsed, "credits_pence", None),
+            "debits_pence": getattr(parsed, "debits_pence", None),
         },
     }
     return {

@@ -90,6 +90,7 @@ class Transaction(models.Model):
         Upload, on_delete=models.PROTECT, related_name="transactions"
     )
     posted_on = models.DateField(db_index=True)
+    source_transaction_date = models.DateField(null=True, blank=True)
     description = models.TextField()
     transaction_type = models.CharField(max_length=60, blank=True)
     amount_pence = models.IntegerField()
@@ -114,6 +115,10 @@ class Transaction(models.Model):
     @property
     def amount_display(self) -> str:
         return _format_pence(self.amount_pence)
+
+    @property
+    def source_date_display(self) -> str:
+        return "" if self.source_transaction_date is None else self.source_transaction_date.isoformat()
 
     @property
     def balance_display(self) -> str:
@@ -144,6 +149,10 @@ class BalanceObservation(models.Model):
     @property
     def amount_display(self) -> str:
         return _format_pence(self.amount_pence)
+
+    @property
+    def source_date_display(self) -> str:
+        return "" if self.source_transaction_date is None else self.source_transaction_date.isoformat()
 
 
 def _format_pence(amount_pence: int) -> str:
