@@ -101,7 +101,7 @@ def publish_section(upload, section: dict) -> None:
         raise SectionRejected("duplicate_source_row", "Two rows share a source location.")
 
     balances = [_balance_fields(balance) for balance in section.get("balances", [])]
-    _check_reconciliation(rows, balances)
+    _check_reconciliation(rows, balances, section)
 
     for row in rows:
         Transaction.objects.create(
@@ -176,15 +176,49 @@ def _positive_int(value) -> int:
     return value
 
 
-def _check_reconciliation(rows: list[dict], balances: list[dict]) -> None:
+def _check_reconciliation(rows: list[dict], balances: list[dict], section: dict) -> None:
     opening = next((b for b in balances if b["kind"] == "opening"), None)
     closing = next((b for b in balances if b["kind"] == "closing"), None)
     if opening is None or closing is None:
-        return
-    total = opening["amount_pence"] + sum(row["amount_pence"] for row in rows)
+        raise SectionRejected(
+            "missing_balance_anchor",
+            "The section has no opening and closing balance evidence; nothing was imported.",
+        )
+
+    previous = opening["amount_pence"]
+    for row in rows:
+        if row["balance_pence"] is None:
+            raise SectionRejected(
+                "missing_running_balance",
+                f"No running balance accompanies the {row['posted_on'].isoformat()} row.",
+            )
+        if row["balance_pence"] - previous != row["amount_pence"]:
+            raise SectionRejected(
+                "running_balance_mismatch",
+                f"The {row['posted_on'].isoformat()} row states {row['amount_pence']} pence "
+                f"but changes the balance by {row['balance_pence'] - previous} pence.",
+            )
+        previous = row["balance_pence"]
+
+    total = previous
     if total != closing["amount_pence"]:
         raise SectionRejected(
             "reconciliation_failed",
             f"Opening plus rows gives {total} pence, not the stated "
             f"{closing['amount_pence']} pence; nothing was imported.",
         )
+
+    stated = section.get("stated_totals")
+    if isinstance(stated, dict):
+        money_in = sum(row["amount_pence"] for row in rows if row["amount_pence"] > 0)
+        money_out = -sum(row["amount_pence"] for row in rows if row["amount_pence"] < 0)
+        if stated.get("money_in_pence") is not None and stated["money_in_pence"] != money_in:
+            raise SectionRejected(
+                "totals_mismatch",
+                f"Stated money in {stated['money_in_pence']} pence differs from rows {money_in} pence.",
+            )
+        if stated.get("money_out_pence") is not None and stated["money_out_pence"] != money_out:
+            raise SectionRejected(
+                "totals_mismatch",
+                f"Stated money out {stated['money_out_pence']} pence differs from rows {money_out} pence.",
+            )

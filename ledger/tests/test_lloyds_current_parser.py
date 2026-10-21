@@ -125,6 +125,38 @@ class RejectionTests(SimpleTestCase):
         self.assertFalse(result.reconciled)
         self.assertIn("date_outside_period", [issue.code for issue in result.issues])
 
+    def test_unfinished_transaction_block_is_reported(self):
+        result = parse(text_with(("Balance (£)\n2,646.80.", "")))
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("unfinished_transaction_block", [issue.code for issue in result.issues])
+
+    def test_impossible_period_date_is_reported_not_raised(self):
+        result = parse(text_with(("01 August 2026 to", "32 August 2026 to")))
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("invalid_period", [issue.code for issue in result.issues])
+
+    def test_missing_description_value_is_not_replaced_by_the_next_label(self):
+        result = parse(text_with(("Description\nCOFFEE SHOP.\nType\n", "Description\nType\n")))
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("malformed_transaction_row", [issue.code for issue in result.issues])
+        self.assertNotIn("Type", [row.description for row in result.rows])
+
+    def test_unreadable_money_column_is_not_treated_as_blank(self):
+        result = parse(
+            text_with(
+                (
+                    "Money Out (£)\nblank.\nBalance (£)\n3,696.80.",
+                    "Money Out (£)\n12.OO.\nBalance (£)\n3,696.80.",
+                )
+            )
+        )
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("malformed_transaction_row", [issue.code for issue in result.issues])
+
     def test_missing_closing_anchor_is_reported(self):
         result = parse(text_with(("Balance on 31 August 2026.\n2,646.80.\n", "")))
 

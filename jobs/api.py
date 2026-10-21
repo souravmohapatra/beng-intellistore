@@ -20,6 +20,7 @@ from pathlib import Path
 
 from jobs.models import Job, JobAttempt, JobEvent, JobResult, WorkerCredential
 from jobs.publication import apply_result, validate_result_payload
+from ledger.models import Upload
 
 MAX_BODY_BYTES = 1024 * 1024
 CLAIM_LOCK_KEY = 0x1A2B3C
@@ -64,6 +65,13 @@ def _json_body(request) -> dict:
     if not isinstance(body, dict):
         raise ApiError("payload must be an object")
     return body
+
+
+def _effective_outcome(outcome: str, upload_status: str) -> str:
+    """Record what publication achieved, not what the worker claimed."""
+    if outcome == "imported" and upload_status != Upload.Status.IMPORTED:
+        return "failed"
+    return outcome
 
 
 def _error(exc: ApiError) -> JsonResponse:
@@ -226,10 +234,11 @@ def result(request, job_id):
             return JsonResponse({"error": str(exc)}, status=400)
 
         upload_status = apply_result(job, body)
+        effective_outcome = _effective_outcome(outcome, upload_status)
         JobResult.objects.create(
             attempt=attempt,
             version=RESULT_VERSION,
-            outcome=outcome,
+            outcome=effective_outcome,
             payload=body,
             payload_sha256=payload_hash,
         )
@@ -242,5 +251,5 @@ def result(request, job_id):
             job.upload.save(update_fields=["status"])
 
     return JsonResponse(
-        {"outcome": outcome, "job": job.pk, "already_recorded": False}
+        {"outcome": effective_outcome, "job": job.pk, "already_recorded": False}
     )

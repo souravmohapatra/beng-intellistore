@@ -82,6 +82,21 @@ first-time Lloyds Current statement is assigned to a non-current account; the
 receipt stays on the selected account, requests review and imports nothing.
 Same-kind accounts remain indistinguishable — recorded limit.
 
+Review (independent, mandatory for this ticket): six findings, all fixed with
+regressions. (1) Publication accepted a section without balance anchors and
+checked only the aggregate equation, so a direction swap plus compensating
+amount could publish income instead of spending — the server now requires both
+anchors, a running balance per row, chains every delta and rechecks stated
+totals. (2) An unfinished transaction block was silently discarded — reported at
+EOF and before the next block. (3) The API returned and recorded the worker's
+`imported` claim even when publication rejected it — the effective outcome now
+comes from publication, and replay returns it. (4) An impossible period date
+raised through the worker and blocked the claim queue — now an `invalid_period`
+issue. (5) A missing description consumed the next label as its value — value
+readers stop at labels and missing fields fail the row. (6) An unreadable money
+cell was treated like `blank` — explicit blank, unreadable and missing states
+are now distinct. Suite after fixes: 66 tests OK; smoke exit 0.
+
 Limits: one supplied layout only; no prior published view exists to retain on a
 failed reprocessing (arrives with reprocessing in later tickets); real-source
 extraction against the private PDFs remains a release gate (tickets 29–30); no

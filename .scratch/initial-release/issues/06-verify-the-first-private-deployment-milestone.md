@@ -1,6 +1,6 @@
 # 06: Verify the first private deployment milestone
 
-Status: ready-for-agent
+Status: needs-info
 Approval: ticket breakdown approved by Sourav
 Blocked by: 05
 Parent: [First-release specification](../spec.md)
@@ -35,6 +35,11 @@ No real power/lease/model actions or NAS database. Existing native Ollama does n
 
 ## Completion evidence
 
-Not started. Record red/green commands, behavioral demo, review findings/fixes,
+Blocked on external inputs, not implementation: deployment to the mini-PC needs
+Sourav's explicit approval (AGENTS: destructive/deployment operations), the
+mini-PC local data path and NAS backup destination (P-04), and private
+hostname/TLS/home-VPN routing plus controller machine authentication (P-05).
+Nothing has been deployed, no host was contacted and no vendor service was
+touched. Prepare configuration and the runbook before requesting approval. Record red/green commands, behavioral demo, review findings/fixes,
 local versus actual-host results, unresolved limits and commit reference when
 available. Passing local tests alone cannot close a required real-host gate.

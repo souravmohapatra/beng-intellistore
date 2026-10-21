@@ -126,6 +126,10 @@ def build_result(claim: dict, parsed) -> dict:
             for balance in parsed.balances
             if balance.observed_on is not None
         ],
+        "stated_totals": {
+            "money_in_pence": parsed.money_in_pence,
+            "money_out_pence": parsed.money_out_pence,
+        },
     }
     return {
         "version": claim["result_version"],

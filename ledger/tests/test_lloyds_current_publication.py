@@ -128,7 +128,35 @@ class RejectionTests(PublicationTestCase):
         self.assertEqual(upload.status, Upload.Status.NEEDS_REVIEW)
         self.assertEqual(Transaction.objects.count(), 0)
         detail = self.client.get(reverse("ledger:upload_detail", args=[upload.pk]))
-        self.assertContains(detail, "reconciliation_failed")
+        self.assertContains(detail, "running_balance_mismatch")
+
+    def test_amount_tampering_that_preserves_the_sum_is_still_rejected(self):
+        claim = self.release_and_claim()
+        payload = self.payload(claim)
+        rows = payload["sections"][0]["transactions"]
+        rows[0]["amount_pence"] = 320
+        rows[1]["amount_pence"] = 249360
+
+        response = self.submit(claim, payload)
+
+        self.assertEqual(response.json()["outcome"], "failed")
+        self.assertEqual(Upload.objects.get().status, Upload.Status.NEEDS_REVIEW)
+        self.assertEqual(Transaction.objects.count(), 0)
+        stored = __import__("jobs.models", fromlist=["JobResult"]).JobResult.objects.get()
+        self.assertEqual(stored.outcome, "failed")
+
+    def test_missing_balance_anchors_are_rejected(self):
+        claim = self.release_and_claim()
+        payload = self.payload(claim)
+        payload["sections"][0]["balances"] = []
+
+        self.submit(claim, payload)
+
+        upload = Upload.objects.get()
+        self.assertEqual(upload.status, Upload.Status.NEEDS_REVIEW)
+        self.assertEqual(Transaction.objects.count(), 0)
+        detail = self.client.get(reverse("ledger:upload_detail", args=[upload.pk]))
+        self.assertContains(detail, "missing_balance_anchor")
 
     def test_account_identity_mismatch_is_visible_and_commits_nothing(self):
         card = Account.objects.create(name="Lloyds Credit", kind=AccountKind.CARD)
@@ -143,6 +171,8 @@ class RejectionTests(PublicationTestCase):
         self.assertEqual(Transaction.objects.count(), 0)
         detail = self.client.get(reverse("ledger:upload_detail", args=[upload.pk]))
         self.assertContains(detail, "account_identity_mismatch")
+        self.assertContains(detail, "Outcome: failed")
+        self.assertContains(detail, "Needs review")
 
     def test_duplicate_source_location_is_rejected(self):
         claim = self.release_and_claim()

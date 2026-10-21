@@ -122,6 +122,14 @@ def parse(text: str) -> ParseResult:
                 value, index = _next_value(lines, index)
                 if value is None or not DATE_PATTERN.match(value):
                     continue  # table header, not a transaction block
+                if block is not None:
+                    result.issues.append(
+                        Issue(
+                            "unfinished_transaction_block",
+                            f"A transaction block started on page {block['page']} "
+                            "was not completed before the next one began.",
+                        )
+                    )
                 block = {"page": page_number, "date": value}
                 continue
 
@@ -160,7 +168,16 @@ def parse(text: str) -> ParseResult:
                 amount = _maybe_pence(value) if value is not None else None
                 if amount is None:
                     continue
-                observed = _parse_statement_date(balance_on.group(1))
+                try:
+                    observed = _parse_statement_date(balance_on.group(1))
+                except ValueError:
+                    result.issues.append(
+                        Issue(
+                            "invalid_balance_date",
+                            f"Balance anchor {balance_on.group(1)} is not a valid date.",
+                        )
+                    )
+                    continue
                 if observed == period_start:
                     result.opening_pence = amount
                     result.balances.append(BalanceAnchor("opening", amount, observed))
@@ -177,6 +194,14 @@ def parse(text: str) -> ParseResult:
                         )
                     )
 
+    if block is not None:
+        result.issues.append(
+            Issue(
+                "unfinished_transaction_block",
+                f"The transaction block starting {block.get('date', '')} on page "
+                f"{block['page']} was not completed.",
+            )
+        )
     _validate(result)
     return result
 
@@ -186,21 +211,47 @@ def _period(first_page: str, issues: list[Issue]):
     if match is None:
         issues.append(Issue("missing_period", "The statement period was not found."))
         return None, None
-    return _parse_statement_date(match.group(1)), _parse_statement_date(match.group(2))
+    try:
+        return _parse_statement_date(match.group(1)), _parse_statement_date(match.group(2))
+    except ValueError:
+        issues.append(
+            Issue("invalid_period", "The statement period contains an impossible date.")
+        )
+        return None, None
 
 
 def _parse_statement_date(text: str) -> date:
     return datetime.strptime(" ".join(text.split()), "%d %B %Y").date()
 
 
+FIELD_LABELS = {
+    "Date",
+    "Description",
+    "Type",
+    "Money In (£)",
+    "Money Out (£)",
+    "Balance (£)",
+    "Money In",
+    "Money Out",
+    "Your Transactions",
+}
+
+
 def _next_value(lines: list[str], index: int) -> tuple[str | None, int]:
-    """Return the value line following a label, skipping accessibility filler."""
+    """Return the value line following a label, skipping accessibility filler.
+
+    A following field label means the value is missing; it is never consumed as
+    the previous field's value.
+    """
     while index < len(lines):
-        candidate = lines[index]
-        index += 1
+        candidate = lines[index].rstrip(".").strip()
         if not candidate or candidate in NOISE_LINES or candidate.startswith(NOISE_PREFIXES):
+            index += 1
             continue
-        return candidate.rstrip(".").strip(), index
+        if candidate in FIELD_LABELS or BALANCE_ON_PATTERN.match(candidate):
+            return None, index
+        index += 1
+        return candidate, index
     return None, index
 
 
@@ -209,6 +260,18 @@ def _maybe_pence(value: str) -> int | None:
         return to_pence(value)
     except InvalidOperation:
         return None
+
+
+def _amount_field(value: str | None) -> tuple[str, int | None]:
+    """Classify a money-column value: amount, explicit blank, invalid or missing."""
+    if value is None:
+        return "missing", None
+    if value.strip().lower() == "blank":
+        return "blank", None
+    pence = _maybe_pence(value)
+    if pence is None:
+        return "invalid", None
+    return "amount", pence
 
 
 def _finish_block(
@@ -227,8 +290,35 @@ def _finish_block(
         )
         return None, running_balance
 
-    balance = _maybe_pence(block.get("balance") or "")
-    if balance is None:
+    description = (block.get("description") or "").strip()
+    transaction_type = (block.get("type") or "").strip()
+    if not description:
+        result.issues.append(
+            Issue(
+                "malformed_transaction_row",
+                f"Row dated {posted_on.isoformat()} on page {page_number} has no description.",
+            )
+        )
+        return None, running_balance
+    if not transaction_type:
+        result.issues.append(
+            Issue(
+                "malformed_transaction_row",
+                f"Row dated {posted_on.isoformat()} on page {page_number} has no type.",
+            )
+        )
+        return None, running_balance
+
+    balance_state, balance = _amount_field(block.get("balance"))
+    if balance_state == "missing":
+        result.issues.append(
+            Issue(
+                "unfinished_transaction_block",
+                f"Row dated {posted_on.isoformat()} on page {page_number} has no balance.",
+            )
+        )
+        return None, running_balance
+    if balance_state != "amount":
         result.issues.append(
             Issue(
                 "malformed_transaction_row",
@@ -237,9 +327,18 @@ def _finish_block(
         )
         return None, running_balance
 
-    money_in = _maybe_pence(block.get("money_in") or "blank")
-    money_out = _maybe_pence(block.get("money_out") or "blank")
-    if money_in and money_out:
+    in_state, money_in = _amount_field(block.get("money_in"))
+    out_state, money_out = _amount_field(block.get("money_out"))
+    if "missing" in {in_state, out_state} or "invalid" in {in_state, out_state}:
+        result.issues.append(
+            Issue(
+                "malformed_transaction_row",
+                f"Row dated {posted_on.isoformat()} on page {page_number} has an "
+                "unreadable money column.",
+            )
+        )
+        return None, running_balance
+    if in_state == "amount" and out_state == "amount":
         result.issues.append(
             Issue(
                 "malformed_transaction_row",
@@ -247,16 +346,16 @@ def _finish_block(
             )
         )
         return None, running_balance
-    if money_in is None and money_out is None:
+    if in_state == "blank" and out_state == "blank":
         result.issues.append(
             Issue(
                 "malformed_transaction_row",
-                f"Row dated {posted_on.isoformat()} has no readable amount.",
+                f"Row dated {posted_on.isoformat()} has no amount.",
             )
         )
         return None, running_balance
 
-    amount_pence = money_in if money_in is not None else -money_out
+    amount_pence = money_in if in_state == "amount" else -money_out
 
     if period_start and period_end and not (period_start <= posted_on <= period_end):
         result.issues.append(
@@ -282,15 +381,15 @@ def _finish_block(
     result.rows.append(
         ParsedTransaction(
             posted_on=posted_on,
-            description=block.get("description") or "",
-            transaction_type=block.get("type") or "",
+            description=description,
+            transaction_type=transaction_type,
             amount_pence=amount_pence,
             balance_pence=balance,
             page=page_number,
             row=sum(1 for row in result.rows if row.page == page_number) + 1,
             source_text=(
-                f"Date {block['date']}; Description {block.get('description') or ''}; "
-                f"Type {block.get('type') or ''}; Money In {block.get('money_in') or 'blank'}; "
+                f"Date {block['date']}; Description {description}; "
+                f"Type {transaction_type}; Money In {block.get('money_in') or 'blank'}; "
                 f"Money Out {block.get('money_out') or 'blank'}; Balance {block.get('balance')}"
             ),
         )
