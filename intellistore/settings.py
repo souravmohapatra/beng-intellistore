@@ -92,6 +92,9 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Local authoritative data (accepted originals and later recovery material).
+DATA_DIR = Path(_env("INTELLISTORE_DATA_DIR", str(BASE_DIR / "var")))
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Private single-user access: one login, no self-service registration.

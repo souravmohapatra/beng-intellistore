@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ upload.filename }} — Statement Intelligence{% endblock %}
+{% block content %}
+  <h1>{{ upload.filename }}</h1>
+  <dl>
+    <dt>Named account</dt>
+    <dd>{{ upload.account.name }} ({{ upload.account.get_kind_display }})</dd>
+    <dt>Status</dt>
+    <dd>{{ upload.get_status_display }}</dd>
+    <dt>Received</dt>
+    <dd>{{ upload.received_at|date:"Y-m-d H:i:s T" }}</dd>
+    <dt>Preserved original</dt>
+    <dd>
+      {{ upload.original.byte_size }} bytes, SHA-256 {{ upload.original.sha256 }}
+      — <a href="{% url 'ledger:upload_original' upload.pk %}">open original</a>
+    </dd>
+  </dl>
+  <p><a href="{% url 'ledger:uploads' %}">Back to uploads</a></p>
+{% endblock %}

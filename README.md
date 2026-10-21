@@ -36,8 +36,8 @@ for deliberately discarding it.
 
 `./scripts/smoke.sh` creates its own venv, installs the pins, and runs the
 checks against a per-invocation Compose project, loopback port, and temporary
-data directory. It runs migrations and the test suite, then removes only its own
-resources:
+data directory. It runs migrations, the test suite and a two-process restart
+check, then removes only its own resources:
 
 ```bash
 ./scripts/smoke.sh              # isolated; removes its database and data after

@@ -1,0 +1,104 @@
+"""Two-process restart check for preserved originals.
+
+Each phase runs in its own interpreter, so only the database and data directory
+can carry the receipt across:
+
+    python scripts/restart_check.py upload   # prints the upload id
+    python scripts/restart_check.py verify <id>
+
+This is local evidence through the application's HTTP interface (Django test
+client), not a WSGI-server or physical power-loss proof.
+"""
+
+import hashlib
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "intellistore.settings")
+
+import django  # noqa: E402
+
+django.setup()
+
+from django.conf import settings  # noqa: E402
+from django.contrib.auth import get_user_model  # noqa: E402
+from django.core.files.uploadedfile import SimpleUploadedFile  # noqa: E402
+from django.test import Client  # noqa: E402
+from django.urls import reverse  # noqa: E402
+
+from ledger.models import Account, AccountKind, Upload  # noqa: E402
+
+FIXTURE = b"%PDF-1.7\n% restart-check fixture\n%%EOF\n"
+FIXTURE_SHA256 = "844a22500189e0d58a2689895f92acab4ad66f8ca859b5a171a37d6d6387e68a"
+FIXTURE_BYTES = 39
+USERNAME = "restart-check"
+PASSWORD = "local-restart-check-password"
+
+
+def sign_in() -> Client:
+    settings.ALLOWED_HOSTS = [*settings.ALLOWED_HOSTS, "testserver"]
+    user_model = get_user_model()
+    if not user_model.objects.filter(username=USERNAME).exists():
+        user_model.objects.create_user(USERNAME, password=PASSWORD)
+    client = Client()
+    if not client.login(username=USERNAME, password=PASSWORD):
+        raise SystemExit("restart check: sign-in failed")
+    return client
+
+
+def upload(client: Client) -> str:
+    account, _ = Account.objects.get_or_create(
+        name="Restart check", defaults={"kind": AccountKind.CURRENT}
+    )
+    response = client.post(
+        reverse("ledger:uploads"),
+        {
+            "account": account.pk,
+            "file": SimpleUploadedFile(
+                "restart.pdf", FIXTURE, content_type="application/pdf"
+            ),
+        },
+    )
+    if response.status_code != 302:
+        raise SystemExit(f"restart check: upload failed with {response.status_code}")
+    return str(Upload.objects.latest("pk").pk)
+
+
+def verify(client: Client, upload_id: str) -> None:
+    upload = Upload.objects.select_related("original", "account").get(pk=int(upload_id))
+    if upload.original.sha256 != FIXTURE_SHA256:
+        raise SystemExit("restart check: receipt digest changed")
+    if upload.original.byte_size != FIXTURE_BYTES:
+        raise SystemExit("restart check: receipt size changed")
+    stored = Path(settings.DATA_DIR) / upload.original.stored_path
+    if hashlib.sha256(stored.read_bytes()).hexdigest() != FIXTURE_SHA256:
+        raise SystemExit("restart check: stored bytes changed")
+
+    response = client.get(reverse("ledger:upload_original", args=[upload.pk]))
+    body = b"".join(response.streaming_content)
+    if response.status_code != 200 or body != FIXTURE:
+        raise SystemExit("restart check: original could not be reopened")
+
+    listing = client.get(reverse("ledger:uploads"))
+    if "restart.pdf" not in listing.content.decode():
+        raise SystemExit("restart check: receipt missing from listing")
+    print("restart check ok")
+
+
+def main(argv: list[str]) -> None:
+    if len(argv) < 2 or argv[1] not in {"upload", "verify"}:
+        raise SystemExit(__doc__)
+    client = sign_in()
+    if argv[1] == "upload":
+        print(upload(client))
+    else:
+        if len(argv) < 3:
+            raise SystemExit("restart check: verify needs an upload id")
+        verify(client, argv[2])
+
+
+if __name__ == "__main__":
+    main(sys.argv)
