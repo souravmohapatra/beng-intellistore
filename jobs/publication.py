@@ -167,9 +167,10 @@ def _balance_fields(balance: dict) -> dict:
     if not isinstance(balance, dict) or balance.get("kind") not in {"opening", "closing"}:
         raise SectionRejected("invalid_balance", "A balance anchor is malformed.")
     try:
-        observed_on = date.fromisoformat(str(balance["observed_on"]))
+        raw_observed = balance.get("observed_on")
+        observed_on = None if raw_observed is None else date.fromisoformat(str(raw_observed))
         amount = _bounded_int(balance["amount_pence"])
-    except (KeyError, TypeError, ValueError) as exc:
+    except (TypeError, ValueError) as exc:
         raise SectionRejected("invalid_balance", "A balance anchor is malformed.") from exc
     return {"kind": balance["kind"], "observed_on": observed_on, "amount_pence": amount}
 

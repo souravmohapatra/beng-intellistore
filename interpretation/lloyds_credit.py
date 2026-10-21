@@ -120,9 +120,7 @@ def parse(text: str) -> ParseResult:
                 if amount is not None:
                     if result.opening_pence is None:
                         result.opening_pence = amount
-                        result.balances.append(
-                            BalanceAnchor("opening", amount, statement_date)
-                        )
+                        result.balances.append(BalanceAnchor("opening", amount, None))
                     elif result.opening_pence != amount:
                         result.issues.append(
                             Issue(

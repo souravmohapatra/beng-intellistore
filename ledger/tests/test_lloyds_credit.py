@@ -140,12 +140,17 @@ class CreditPublicationTests(UploadSetupMixin, TestCase):
             ],
         )
         self.assertEqual(
-            list(BalanceObservation.objects.order_by("kind").values_list("kind", "amount_pence")),
-            [("closing", 86000), ("opening", 40000)],
+            list(
+                BalanceObservation.objects.order_by("kind").values_list(
+                    "kind", "amount_pence", "observed_on"
+                )
+            ),
+            [("closing", 86000, date(2026, 9, 7)), ("opening", 40000, None)],
         )
         page = self.client.get(reverse("ledger:account_transactions", args=[self.card.pk]))
         self.assertContains(page, "NON-STERLING PURCHASE FEE")
         self.assertContains(page, "For credit cards")
+        self.assertContains(page, "(date unknown)")
 
     def test_card_statement_assigned_to_a_current_account_requests_review(self):
         response = self.import_statement(account=self.account)

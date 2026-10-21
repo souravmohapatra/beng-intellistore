@@ -9,7 +9,11 @@
     {% if balances %}
       <ul>
         {% for balance in balances %}
-          <li>{{ balance.get_kind_display }} on {{ balance.observed_on }} — {{ balance.amount_display }}</li>
+          <li>
+            {{ balance.get_kind_display }}
+            {% if balance.observed_on %}on {{ balance.observed_on }}{% else %}(date unknown){% endif %}
+            — {{ balance.amount_display }}
+          </li>
         {% endfor %}
       </ul>
     {% else %}

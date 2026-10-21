@@ -125,11 +125,12 @@ def build_result(claim: dict, parsed) -> dict:
         "balances": [
             {
                 "kind": balance.kind,
-                "observed_on": balance.observed_on.isoformat(),
+                "observed_on": balance.observed_on.isoformat()
+                if balance.observed_on is not None
+                else None,
                 "amount_pence": balance.amount_pence,
             }
             for balance in parsed.balances
-            if balance.observed_on is not None
         ],
         "stated_totals": {
             "money_in_pence": getattr(parsed, "money_in_pence", None),

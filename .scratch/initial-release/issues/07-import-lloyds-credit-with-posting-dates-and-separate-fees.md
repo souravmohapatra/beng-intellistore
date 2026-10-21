@@ -69,6 +69,11 @@ and ran the worker (`outcome: imported`); the account page shows seven debt
 movements with posting and purchase dates, the £400 payment credit, the £0.75
 fee, opening/closing debt and source page links.
 
+Correction after review feedback: the previous balance carries no evidenced
+date, so it is stored with an unknown observation date and displayed as
+"(date unknown)" instead of being labelled with the statement date; only the
+new balance uses the statement date. Regression asserts the null date.
+
 Limits: one card layout; no FX ledger (annotations only); review still pending
 on this slice before it is treated as final; real-source accuracy remains a
 release gate. No deployment or push. Record red/green commands, behavioral demo, review findings/fixes,
