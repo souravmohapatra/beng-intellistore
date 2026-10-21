@@ -45,6 +45,9 @@
               {% for issue in attempt.result.payload.issues %}
                 <li>{{ issue.code }}{% if issue.message %}: {{ issue.message }}{% endif %}</li>
               {% endfor %}
+              {% for issue in attempt.result.payload.server_issues %}
+                <li>{{ issue.section }} — {{ issue.code }}: {{ issue.message }}</li>
+              {% endfor %}
             </ul>
           {% endif %}
         {% endif %}

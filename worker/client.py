@@ -63,20 +63,27 @@ class WorkerClient:
         )
 
 
-def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:
-    """Claim and process one job, cleaning temporary files in all cases."""
-    claim = client.claim()
-    if claim is None:
+def interpret(data: bytes, content_type: str):
+    """Interpret an assigned source; None means no supported layout matched."""
+    if content_type != "application/pdf":
         return None
+    import io
 
-    workdir = Path(tempfile.mkdtemp(dir=work_root) if work_root else tempfile.mkdtemp())
-    try:
-        source = workdir / "source"
-        source.write_bytes(client.download_source(claim["job"]))
-        client.progress(claim["job"], "downloaded")
-        client.progress(claim["job"], "inspected")
+    import pypdf
 
-        result = {
+    from interpretation.lloyds_current import parse
+
+    reader = pypdf.PdfReader(io.BytesIO(data))
+    if reader.is_encrypted:
+        return None
+    text = "\f".join((page.extract_text() or "") for page in reader.pages)
+    result = parse(text)
+    return result if result.recognised else None
+
+
+def build_result(claim: dict, parsed) -> dict:
+    if parsed is None:
+        return {
             "version": claim["result_version"],
             "attempt": claim["attempt"],
             "outcome": "unsupported",
@@ -88,7 +95,64 @@ def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:
             ],
             "sections": [],
         }
-        submitted = client.submit_result(claim["job"], result)
+
+    reconciled = bool(parsed.reconciled)
+    section = {
+        "name": "lloyds_current",
+        "status": "ok" if reconciled else "failed",
+        "account_kind_hint": parsed.account_kind_hint,
+        "issues": [
+            {"code": issue.code, "message": issue.message} for issue in parsed.issues
+        ],
+        "transactions": [
+            {
+                "posted_on": row.posted_on.isoformat(),
+                "description": row.description,
+                "transaction_type": row.transaction_type,
+                "amount_pence": row.amount_pence,
+                "balance_pence": row.balance_pence,
+                "page": row.page,
+                "row": row.row,
+                "source_text": row.source_text,
+            }
+            for row in (parsed.rows if reconciled else [])
+        ],
+        "balances": [
+            {
+                "kind": balance.kind,
+                "observed_on": balance.observed_on.isoformat(),
+                "amount_pence": balance.amount_pence,
+            }
+            for balance in parsed.balances
+            if balance.observed_on is not None
+        ],
+    }
+    return {
+        "version": claim["result_version"],
+        "attempt": claim["attempt"],
+        "outcome": "imported" if reconciled else "failed",
+        "issues": section["issues"],
+        "sections": [section],
+    }
+
+
+def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:
+    """Claim and process one job, cleaning temporary files in all cases."""
+    claim = client.claim()
+    if claim is None:
+        return None
+
+    workdir = Path(tempfile.mkdtemp(dir=work_root) if work_root else tempfile.mkdtemp())
+    try:
+        source = workdir / "source"
+        data = client.download_source(claim["job"])
+        source.write_bytes(data)
+        client.progress(claim["job"], "downloaded")
+
+        parsed = interpret(data, claim["upload"]["content_type"])
+        client.progress(claim["job"], "interpreted")
+
+        submitted = client.submit_result(claim["job"], build_result(claim, parsed))
         return {"job": claim["job"], **submitted}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

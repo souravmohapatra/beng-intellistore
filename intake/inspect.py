@@ -15,7 +15,8 @@ MAX_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 100
 PDF_MAGIC = b"%PDF-"
 
-UNSUPPORTED_NOTE = "Preserved, but this layout is not a supported statement format yet."
+# Readable files are preserved and wait for interpretation; the worker decides
+# whether a layout is supported, so intake never claims an import.``
 
 
 class IntakeRejected(Exception):
@@ -41,7 +42,7 @@ def inspect(data: bytes, filename: str) -> Inspection:
 
     if _readable_text(data) is not None:
         content_type = "text/csv" if filename.lower().endswith(".csv") else "text/plain"
-        return Inspection(content_type=content_type, status=Upload.Status.UNSUPPORTED)
+        return Inspection(content_type=content_type, status=Upload.Status.PENDING)
 
     raise IntakeRejected(
         "This file type is not supported. Upload a PDF, text or CSV statement."
@@ -68,7 +69,7 @@ def _inspect_pdf(data: bytes) -> Inspection:
         raise
     except Exception as exc:  # malformed structure, unsupported filters, EOF...
         raise IntakeRejected("This file is damaged or unreadable.") from exc
-    return Inspection(content_type="application/pdf", status=Upload.Status.UNSUPPORTED)
+    return Inspection(content_type="application/pdf", status=Upload.Status.PENDING)
 
 
 def _readable_text(data: bytes) -> str | None:

@@ -12,6 +12,7 @@
             <h3>{{ account.name }}</h3>
             <p>{{ account.get_kind_display }}</p>
             <p>Balance unknown</p>
+            <p><a href="{% url 'ledger:account_transactions' account.pk %}">Transactions</a></p>
           </li>
         {% endfor %}
       </ul>

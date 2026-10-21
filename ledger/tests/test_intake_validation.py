@@ -66,7 +66,7 @@ class ContentOverExtensionTests(UploadSetupMixin, TestCase):
 
         self.assertEqual(response.status_code, 302)
         upload = Upload.objects.get()
-        self.assertEqual(upload.status, Upload.Status.UNSUPPORTED)
+        self.assertEqual(upload.status, Upload.Status.PENDING)
 
     def test_pdf_content_named_csv_is_still_read_as_a_pdf(self):
         response = self.upload(text_pdf(), filename="statement.csv")
@@ -75,30 +75,18 @@ class ContentOverExtensionTests(UploadSetupMixin, TestCase):
         self.assertEqual(Upload.objects.get().original.content_type, "application/pdf")
 
 
-class UnsupportedStatusTests(UploadSetupMixin, TestCase):
-    def test_readable_unsupported_layout_is_preserved_with_visible_status(self):
+class PendingStatusTests(UploadSetupMixin, TestCase):
+    def test_readable_upload_waits_for_interpretation_without_claiming_import(self):
         self.upload(CSV_TEXT, filename="export.txt")
         upload = Upload.objects.get()
 
+        self.assertEqual(upload.status, Upload.Status.PENDING)
         detail = self.client.get(
             reverse("ledger:upload_detail", args=[upload.pk])
         )
-        self.assertContains(detail, "Unsupported")
-        self.assertContains(detail, "not a supported statement format yet")
-
-        listing = self.client.get(reverse("ledger:uploads"))
-        self.assertContains(listing, "export.txt")
-        self.assertContains(listing, "Unsupported")
-
-    def test_unsupported_receipt_never_claims_processing_success(self):
-        self.upload(CSV_TEXT)
-
-        upload = Upload.objects.get()
-        self.assertNotIn(upload.status, {Upload.Status.PENDING})
-        detail = self.client.get(
-            reverse("ledger:upload_detail", args=[upload.pk])
-        )
-        self.assertNotContains(detail, "Processed")
+        self.assertContains(detail, "Pending")
+        self.assertNotContains(detail, "Imported")
+        self.assertContains(detail, "Waiting for release")
 
 
 class AccountSelectionTests(UploadSetupMixin, TestCase):

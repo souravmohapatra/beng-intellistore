@@ -19,11 +19,12 @@ from django.conf import settings
 from pathlib import Path
 
 from jobs.models import Job, JobAttempt, JobEvent, JobResult, WorkerCredential
+from jobs.publication import apply_result, validate_result_payload
 
 MAX_BODY_BYTES = 1024 * 1024
 CLAIM_LOCK_KEY = 0x1A2B3C
 RESULT_VERSION = 1
-ALLOWED_OUTCOMES = {"unsupported", "failed"}
+ALLOWED_OUTCOMES = {"unsupported", "failed", "imported"}
 MAX_STAGE_LENGTH = 100
 MAX_MESSAGE_LENGTH = 500
 
@@ -124,6 +125,7 @@ def claim(request):
                 "id": job.upload_id,
                 "filename": job.upload.filename,
                 "account": job.upload.account.name,
+                "content_type": job.upload.original.content_type,
             },
         }
     )
@@ -218,11 +220,12 @@ def result(request, job_id):
         outcome = body.get("outcome")
         if outcome not in ALLOWED_OUTCOMES:
             return JsonResponse({"error": "unsupported outcome"}, status=400)
-        issues = body.get("issues", [])
-        sections = body.get("sections", [])
-        if not isinstance(issues, list) or not isinstance(sections, list):
-            return JsonResponse({"error": "issues and sections must be lists"}, status=400)
+        try:
+            validate_result_payload(body)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
 
+        upload_status = apply_result(job, body)
         JobResult.objects.create(
             attempt=attempt,
             version=RESULT_VERSION,
@@ -232,10 +235,11 @@ def result(request, job_id):
         )
         attempt.finished_at = timezone.now()
         attempt.save(update_fields=["finished_at"])
-        job.status = (
-            Job.Status.COMPLETED if outcome == "unsupported" else Job.Status.FAILED
-        )
+        job.status = Job.Status.COMPLETED
         job.save(update_fields=["status"])
+        if upload_status != job.upload.status:
+            job.upload.status = upload_status
+            job.upload.save(update_fields=["status"])
 
     return JsonResponse(
         {"outcome": outcome, "job": job.pk, "already_recorded": False}

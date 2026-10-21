@@ -15,7 +15,7 @@ from intake.inspect import FileTooLarge, IntakeRejected
 from intake.storage import StorageUnavailable
 from jobs.models import Job
 from ledger.forms import UploadForm
-from ledger.models import Account, Upload
+from ledger.models import Account, BalanceObservation, Transaction, Upload
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
 
@@ -28,6 +28,24 @@ class AccountOverview(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         return Account.objects.all()
+
+
+class AccountTransactionsView(LoginRequiredMixin, DetailView):
+    """Committed transactions and balance anchors for one named account."""
+
+    template_name = "ledger/account_transactions.html"
+    context_object_name = "account"
+
+    def get_queryset(self):
+        return Account.objects.all()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["transactions"] = Transaction.objects.filter(
+            account=self.object
+        ).select_related("upload")
+        context["balances"] = BalanceObservation.objects.filter(account=self.object)
+        return context
 
 
 class UploadListView(LoginRequiredMixin, View):

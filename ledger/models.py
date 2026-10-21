@@ -57,6 +57,8 @@ class Upload(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         UNSUPPORTED = "unsupported", "Unsupported"
+        IMPORTED = "imported", "Imported"
+        NEEDS_REVIEW = "needs_review", "Needs review"
 
     original = models.ForeignKey(
         Original, on_delete=models.PROTECT, related_name="uploads"
@@ -76,3 +78,75 @@ class Upload(models.Model):
 
     def __str__(self) -> str:
         return f"{self.filename} → {self.account}"
+
+
+class Transaction(models.Model):
+    """An account-specific financial record derived from one source row."""
+
+    account = models.ForeignKey(
+        Account, on_delete=models.PROTECT, related_name="transactions"
+    )
+    upload = models.ForeignKey(
+        Upload, on_delete=models.PROTECT, related_name="transactions"
+    )
+    posted_on = models.DateField(db_index=True)
+    description = models.TextField()
+    transaction_type = models.CharField(max_length=60, blank=True)
+    amount_pence = models.IntegerField()
+    balance_pence = models.IntegerField(null=True, blank=True)
+    source_page = models.PositiveIntegerField()
+    source_row = models.PositiveIntegerField()
+    source_text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["posted_on", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["upload", "source_page", "source_row"],
+                name="unique_source_row_per_upload",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.posted_on} {self.description} ({self.amount_pence})"
+
+    @property
+    def amount_display(self) -> str:
+        return _format_pence(self.amount_pence)
+
+    @property
+    def balance_display(self) -> str:
+        return "" if self.balance_pence is None else _format_pence(self.balance_pence)
+
+
+class BalanceObservation(models.Model):
+    """A source-supported balance anchor for one account."""
+
+    class Kind(models.TextChoices):
+        OPENING = "opening", "Opening balance"
+        CLOSING = "closing", "Closing balance"
+
+    account = models.ForeignKey(
+        Account, on_delete=models.PROTECT, related_name="balance_observations"
+    )
+    upload = models.ForeignKey(
+        Upload, on_delete=models.PROTECT, related_name="balance_observations"
+    )
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    observed_on = models.DateField()
+    amount_pence = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["observed_on", "pk"]
+
+    @property
+    def amount_display(self) -> str:
+        return _format_pence(self.amount_pence)
+
+
+def _format_pence(amount_pence: int) -> str:
+    sign = "-" if amount_pence < 0 else ""
+    pence = abs(amount_pence)
+    return f"{sign}£{pence // 100:,}.{pence % 100:02d}"

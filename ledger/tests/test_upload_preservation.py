@@ -27,7 +27,7 @@ class PreservationTests(UploadSetupMixin, TestCase):
         )
         self.assertEqual(upload.account, self.account)
         self.assertEqual(upload.filename, "statement.pdf")
-        self.assertEqual(upload.status, Upload.Status.UNSUPPORTED)
+        self.assertEqual(upload.status, Upload.Status.PENDING)
         self.assertEqual(upload.original.sha256, FIXTURE_SHA256)
         self.assertEqual(upload.original.byte_size, FIXTURE_BYTES)
         self.assertEqual(
