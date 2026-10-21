@@ -15,6 +15,8 @@ urlpatterns = [
     ),
     path("transactions/", views.MetricDrilldownView.as_view(), name="metric"),
     path("search/", views.SearchView.as_view(), name="search"),
+    path("review/", views.ReviewListView.as_view(), name="review"),
+    path("review/<int:pk>/", views.ReviewDetailView.as_view(), name="review_detail"),
     path("uploads/", views.UploadListView.as_view(), name="uploads"),
     path("uploads/<int:pk>/", views.UploadDetailView.as_view(), name="upload_detail"),
     path(

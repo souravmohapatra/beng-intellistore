@@ -55,7 +55,15 @@ IDENTIFIED_INCOME_TYPES = {"Salary", "Interest"}
 
 
 def classify(transaction: Transaction) -> RowEffect | None:
-    """Return the reporting effect, or None when the classification is unknown."""
+    """Confirmed corrections take precedence over machine-derived effects."""
+    correction = active_correction(transaction)
+    if correction is not None:
+        return effect_for_classification(correction.classification, transaction)
+    return classify_source(transaction)
+
+
+def classify_source(transaction: Transaction) -> RowEffect | None:
+    """Machine-derived reporting effect, or None when the evidence is unresolved."""
     amount = transaction.amount_pence
     kind = transaction.account.kind
     description = transaction.description.upper()
@@ -98,11 +106,54 @@ def classify(transaction: Transaction) -> RowEffect | None:
     return None
 
 
+def active_correction(transaction):
+    """Latest non-reverted correction; works with prefetched corrections."""
+    active = [item for item in transaction.corrections.all() if item.reverted_at is None]
+    return active[-1] if active else None
+
+
+def classification_applies(classification: str, transaction: Transaction) -> bool:
+    """A confirmation must agree with the source's signed direction."""
+    amount = transaction.amount_pence
+    kind = transaction.account.kind
+    if classification == "spending":
+        return amount < 0 if kind != AccountKind.CARD else amount > 0
+    if classification == "income":
+        return amount > 0 and kind != AccountKind.CARD
+    if classification == "refund":
+        return amount > 0 if kind != AccountKind.CARD else amount < 0
+    if classification in {"transfer", "unknown"}:
+        return True
+    return False
+
+
+def effect_for_classification(classification: str, transaction: Transaction) -> RowEffect | None:
+    """Translate a confirmed classification into reporting effects.
+
+    Only valid directions are translated; callers check applicability first.
+    """
+    amount = transaction.amount_pence
+    kind = transaction.account.kind
+    if classification == "spending":
+        if kind == AccountKind.CARD:
+            return RowEffect(spending_pence=amount)
+        return RowEffect(spending_pence=-amount, cash_outgoing_pence=-amount)
+    if classification == "income":
+        return RowEffect(income_pence=amount)
+    if classification == "refund":
+        return RowEffect(spending_pence=-amount)
+    if classification == "transfer":
+        return RowEffect()
+    return None
+
+
 def compute_totals(period_start: date, period_end: date) -> TotalsReport:
     report = TotalsReport(period_start=period_start, period_end=period_end)
 
-    rows = Transaction.objects.select_related("account").filter(
-        posted_on__gte=period_start, posted_on__lte=period_end
+    rows = (
+        Transaction.objects.select_related("account")
+        .prefetch_related("corrections")
+        .filter(posted_on__gte=period_start, posted_on__lte=period_end)
     )
     for row in rows:
         effect = classify(row)

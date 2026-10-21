@@ -3,6 +3,8 @@
 from datetime import date
 from pathlib import Path
 
+from django.db import transaction as transaction_db
+
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
@@ -18,7 +20,7 @@ from intake.inspect import FileTooLarge, IntakeRejected
 from intake.storage import StorageUnavailable
 from jobs.models import Job
 from ledger.forms import UploadForm
-from ledger.models import Account, BalanceObservation, Transaction, Upload
+from ledger.models import Account, BalanceObservation, Correction, Transaction, Upload
 from reporting.history import (
     account_balance_rows,
     chart_geometry,
@@ -26,7 +28,14 @@ from reporting.history import (
     format_pence,
     net_cash_history,
 )
-from reporting.totals import compute_totals
+from reporting.totals import (
+    active_correction,
+    classify,
+    classify_source,
+    compute_totals,
+    classification_applies,
+    effect_for_classification,
+)
 from reporting.transactions import METRIC_LABELS, PAGE_SIZE, metric_entries, search_transactions
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
@@ -147,6 +156,130 @@ class AccountTransactionsView(LoginRequiredMixin, DetailView):
         ).select_related("upload")
         context["balances"] = BalanceObservation.objects.filter(account=self.object)
         return context
+
+
+def _describe_effect(effect) -> str:
+    if effect is None:
+        return "Unresolved: excluded from totals (provisional)"
+    parts = []
+    if effect.spending_pence:
+        parts.append(f"spending {format_pence(effect.spending_pence)}")
+    if effect.income_pence:
+        parts.append(f"income {format_pence(effect.income_pence)}")
+    if effect.cash_outgoing_pence:
+        parts.append(f"cash outgoing {format_pence(effect.cash_outgoing_pence)}")
+    return "; ".join(parts) if parts else "No spending, income or cash outgoing"
+
+
+class ReviewListView(LoginRequiredMixin, TemplateView):
+    """Transactions needing a classification decision or already corrected."""
+
+    template_name = "ledger/review_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        rows = []
+        transactions = (
+            Transaction.objects.select_related("account", "upload")
+            .prefetch_related("corrections")
+            .order_by("-posted_on", "-pk")[:500]
+        )
+        for transaction in transactions:
+            correction = active_correction(transaction)
+            if transaction.needs_review or correction is not None or classify(transaction) is None:
+                rows.append(
+                    {
+                        "transaction": transaction,
+                        "corrected": correction is not None,
+                        "label": (
+                            f"Corrected: {correction.get_classification_display()}"
+                            if correction
+                            else "Unresolved"
+                        ),
+                    }
+                )
+        context["rows"] = rows
+        return context
+
+
+class ReviewDetailView(LoginRequiredMixin, View):
+    template_name = "ledger/review_detail.html"
+
+    def get(self, request, pk):
+        return self._render(request, pk)
+
+    def post(self, request, pk):
+        transaction = get_object_or_404(
+            Transaction.objects.select_related("account", "upload"), pk=pk
+        )
+        action = request.POST.get("action")
+        if action == "revert":
+            for correction in transaction.corrections.filter(reverted_at__isnull=True):
+                correction.reverted_at = timezone.now()
+                correction.save(update_fields=["reverted_at"])
+            return redirect("ledger:review_detail", pk=pk)
+        if action == "correct":
+            classification = request.POST.get("classification")
+            if classification not in Correction.Classification.values:
+                return HttpResponseBadRequest("Unknown classification")
+            if not classification_applies(classification, transaction):
+                return self._render(
+                    request,
+                    pk,
+                    error=(
+                        "That classification does not match the source's signed "
+                        "direction; no correction was saved."
+                    ),
+                    status=400,
+                )
+            with transaction_db.atomic():
+                for correction in transaction.corrections.filter(
+                    reverted_at__isnull=True
+                ):
+                    correction.reverted_at = timezone.now()
+                    correction.save(update_fields=["reverted_at"])
+                Correction.objects.create(
+                    transaction=transaction,
+                    classification=classification,
+                    note=(request.POST.get("note") or "")[:1000],
+                )
+            return redirect("ledger:review_detail", pk=pk)
+        return HttpResponseBadRequest("Unknown action")
+
+    def _render(self, request, pk, error=None, status=200):
+        transaction = get_object_or_404(
+            Transaction.objects.select_related("account", "upload").prefetch_related(
+                "corrections"
+            ),
+            pk=pk,
+        )
+        active = active_correction(transaction)
+        options = [
+            {
+                "value": value,
+                "label": label,
+                "effect": (
+                    _describe_effect(effect_for_classification(value, transaction))
+                    if classification_applies(value, transaction)
+                    else "Not applicable to this source's signed direction"
+                ),
+                "applicable": classification_applies(value, transaction),
+            }
+            for value, label in Correction.Classification.choices
+        ]
+        return render(
+            request,
+            self.template_name,
+            {
+                "transaction": transaction,
+                "corrections": transaction.corrections.all(),
+                "active_correction": active,
+                "machine_effect": _describe_effect(classify_source(transaction)),
+                "options": options,
+                "correction_error": error,
+            },
+            status=status,
+        )
 
 
 class MetricDrilldownView(LoginRequiredMixin, TemplateView):

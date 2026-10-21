@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Review — Statement Intelligence{% endblock %}
+{% block content %}
+  <h1>Review</h1>
+  <p>Transactions with an unresolved classification or a confirmed correction.</p>
+  {% if rows %}
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Posted</th>
+          <th scope="col">Account</th>
+          <th scope="col">Description</th>
+          <th scope="col">Status</th>
+          <th scope="col">Source</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.transaction.posted_on|date:"Y-m-d" }}</td>
+            <td>{{ row.transaction.account.name }}</td>
+            <td>{{ row.transaction.description }}</td>
+            <td>{{ row.label }}</td>
+            <td>
+              <a href="{% url 'ledger:upload_original' row.transaction.upload_id %}">open source</a>
+            </td>
+            <td><a href="{% url 'ledger:review_detail' row.transaction.pk %}">review</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Nothing needs review.</p>
+  {% endif %}
+{% endblock %}

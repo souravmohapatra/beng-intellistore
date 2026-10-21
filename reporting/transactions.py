@@ -4,7 +4,7 @@ from datetime import date
 
 from ledger.models import AccountKind, Transaction
 from reporting.history import format_pence
-from reporting.totals import classify
+from reporting.totals import active_correction, classify
 
 METRIC_LABELS = {
     "spending": "Spending",
@@ -23,6 +23,7 @@ def metric_entries(metric: str, period_start: date, period_end: date):
 
     rows = (
         Transaction.objects.select_related("account", "upload")
+        .prefetch_related("corrections")
         .filter(posted_on__gte=period_start, posted_on__lte=period_end)
         .order_by("posted_on", "pk")
     )
@@ -69,8 +70,10 @@ def _explain(metric: str, transaction: Transaction) -> str:
 
 def search_transactions(query: str, period_start=None, period_end=None):
     """Match the original description text only, newest first."""
-    rows = Transaction.objects.select_related("account", "upload").filter(
-        description__icontains=query
+    rows = (
+        Transaction.objects.select_related("account", "upload")
+        .prefetch_related("corrections")
+        .filter(description__icontains=query)
     )
     if period_start is not None and period_end is not None:
         rows = rows.filter(posted_on__gte=period_start, posted_on__lte=period_end)

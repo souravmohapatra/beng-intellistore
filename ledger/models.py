@@ -106,6 +106,7 @@ class Transaction(models.Model):
     source_page = models.PositiveIntegerField()
     source_row = models.PositiveIntegerField()
     source_text = models.TextField()
+    needs_review = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -168,3 +169,29 @@ def _format_pence(amount_pence: int) -> str:
     sign = "-" if amount_pence < 0 else ""
     pence = abs(amount_pence)
     return f"{sign}£{pence // 100:,}.{pence % 100:02d}"
+
+
+class Correction(models.Model):
+    """A user-confirmed classification override with append-only history."""
+
+    class Classification(models.TextChoices):
+        SPENDING = "spending", "Spending"
+        INCOME = "income", "Income"
+        TRANSFER = "transfer", "Transfer between own accounts"
+        REFUND = "refund", "Refund"
+        UNKNOWN = "unknown", "Unknown"
+
+    transaction = models.ForeignKey(
+        Transaction, on_delete=models.CASCADE, related_name="corrections"
+    )
+    classification = models.CharField(max_length=20, choices=Classification.choices)
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    reverted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["pk"]
+
+    @property
+    def is_active(self) -> bool:
+        return self.reverted_at is None

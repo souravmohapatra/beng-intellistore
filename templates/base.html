@@ -12,6 +12,7 @@
           <a href="{% url 'ledger:overview' %}">Overview</a>
           <a href="{% url 'ledger:uploads' %}">Uploads</a>
           <a href="{% url 'ledger:search' %}">Search</a>
+          <a href="{% url 'ledger:review' %}">Review</a>
           <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}
             <button type="submit">Sign out</button>
