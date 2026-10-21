@@ -25,6 +25,7 @@ from ledger.models import (
     BalanceObservation,
     Correction,
     DuplicateMatch,
+    ReversalLink,
     Transaction,
     TransferLink,
     Upload,
@@ -45,6 +46,7 @@ from reporting.totals import (
     effect_for_classification,
 )
 from reporting.transactions import METRIC_LABELS, PAGE_SIZE, metric_entries, search_transactions
+from reporting.reversals import candidates_for as reversal_candidates_for, reversal_direction
 from reporting.transfers import candidates_for
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
@@ -321,6 +323,60 @@ class ReviewDetailView(LoginRequiredMixin, View):
                     needs_review=False
                 )
             return redirect("ledger:review_detail", pk=pk)
+        if action == "reverse":
+            peer_id = request.POST.get("peer")
+            with transaction_db.atomic():
+                locked = list(
+                    Transaction.objects.select_for_update()
+                    .filter(pk__in=[transaction.pk, peer_id])
+                    .order_by("pk")
+                )
+                if len(locked) != 2:
+                    return self._render(
+                        request, pk, error="That pairing no longer exists.", status=400
+                    )
+                direction = reversal_direction(*locked)
+                if direction is None:
+                    return self._render(
+                        request,
+                        pk,
+                        error="The reversal direction is ambiguous; no link was saved.",
+                        status=400,
+                    )
+                reversal_row, original = direction
+                if (
+                    ReversalLink.objects.filter(
+                        transaction__in=[reversal_row.pk, original.pk]
+                    ).exists()
+                    or ReversalLink.objects.filter(
+                        reverses__in=[reversal_row.pk, original.pk]
+                    ).exists()
+                ):
+                    return self._render(
+                        request,
+                        pk,
+                        error="One of these entries already has a reversal decision.",
+                        status=400,
+                    )
+                matches = [
+                    candidate
+                    for candidate in reversal_candidates_for(reversal_row)
+                    if candidate["transaction"].pk == original.pk
+                ]
+                if not matches:
+                    return self._render(
+                        request,
+                        pk,
+                        error="That pairing is no longer a valid reversal candidate.",
+                        status=400,
+                    )
+                ReversalLink.objects.create(
+                    transaction=reversal_row, reverses=original
+                )
+                Transaction.objects.filter(
+                    pk__in=[reversal_row.pk, original.pk]
+                ).update(needs_review=False)
+            return redirect("ledger:review_detail", pk=pk)
         if action == "keep_both":
             transaction.needs_review = False
             transaction.save(update_fields=["needs_review"])
@@ -398,6 +454,7 @@ class ReviewDetailView(LoginRequiredMixin, View):
                 "transaction": transaction,
                 "overlap_candidates": candidates,
                 "transfer_candidates": candidates_for(transaction),
+                "reversal_candidates": reversal_candidates_for(transaction),
                 "duplicate_decision": transaction.duplicate_matches.first(),
                 "corrections": transaction.corrections.all(),
                 "active_correction": active,

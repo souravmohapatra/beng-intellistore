@@ -245,3 +245,19 @@ class TransferLink(models.Model):
             models.UniqueConstraint(fields=["transaction_a"], name="one_link_for_a"),
             models.UniqueConstraint(fields=["transaction_b"], name="one_link_for_b"),
         ]
+
+
+class ReversalLink(models.Model):
+    """A user-confirmed reversal of an evidenced original charge or payment.
+
+    The reversal row keeps its own source entry; only spending/income effects are
+    reversed in the reversal's posting period. Gross cash outgoing is preserved.
+    """
+
+    transaction = models.OneToOneField(
+        Transaction, on_delete=models.CASCADE, related_name="reversal_link"
+    )
+    reverses = models.ForeignKey(
+        Transaction, on_delete=models.PROTECT, related_name="reversal_targets"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)

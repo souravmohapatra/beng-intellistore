@@ -16,6 +16,7 @@ from datetime import date
 from ledger.models import Account, AccountKind, BalanceObservation, DuplicateMatch, Transaction
 from reporting.effects import RowEffect
 from reporting.history import latest_balances
+from reporting.reversals import reversal_effect, reversal_for
 from reporting.transfers import link_for, transfer_effect
 
 
@@ -60,6 +61,9 @@ def classify(transaction: Transaction) -> RowEffect | None:
     correction = active_correction(transaction)
     if correction is not None:
         return effect_for_classification(correction.classification, transaction)
+    reversal = reversal_for(transaction)
+    if reversal is not None:
+        return reversal_effect(transaction, reversal.reverses)
     return classify_source(transaction)
 
 
@@ -100,7 +104,7 @@ def classify_source(transaction: Transaction) -> RowEffect | None:
             return RowEffect(spending_pence=-amount) if amount > 0 else None
         # GBP converted out is spending and outgoing; the foreign leg is ignored.
         return RowEffect(spending_pence=-amount, cash_outgoing_pence=-amount) if amount < 0 else None
-    if transaction_type in SPENDING_TYPES:
+    if transaction_type in SPENDING_TYPES or (amount < 0 and "FEE" in description):
         if amount < 0:
             return RowEffect(spending_pence=-amount, cash_outgoing_pence=-amount)
         return None
@@ -153,6 +157,7 @@ def compute_totals(period_start: date, period_end: date) -> TotalsReport:
 
     rows = (
         Transaction.objects.select_related("account")
+        .select_related("reversal_link", "reversal_link__reverses")
         .prefetch_related(
             "corrections",
             "duplicate_matches",

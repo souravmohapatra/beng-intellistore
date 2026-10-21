@@ -42,6 +42,33 @@
     </section>
   {% endif %}
 
+  {% if reversal_candidates %}
+    <section aria-labelledby="reversal-heading">
+      <h2 id="reversal-heading">Possible reversals</h2>
+      <p>
+        An opposite amount and a reversal wording are candidate signals only.
+        Confirming reverses spending/income in the reversal's period; gross cash
+        outgoing is preserved.
+      </p>
+      <ul>
+        {% for candidate in reversal_candidates %}
+          <li>
+            {{ candidate.transaction.account.name }} · {{ candidate.transaction.posted_on|date:"Y-m-d" }}
+            · {{ candidate.transaction.description }} · {{ candidate.transaction.amount_display }}
+            ({{ candidate.days_apart }} day(s) apart)
+            <form method="post" action="{% url 'ledger:review_detail' transaction.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="reverse">
+              <input type="hidden" name="peer" value="{{ candidate.transaction.pk }}">
+              <button type="submit">Confirm reversal</button>
+            </form>
+            <a href="{% url 'ledger:upload_original' candidate.transaction.upload_id %}">open other source</a>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
   {% if transfer_candidates %}
     <section aria-labelledby="transfer-heading">
       <h2 id="transfer-heading">Possible transfers or repayments</h2>
