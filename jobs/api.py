@@ -73,6 +73,8 @@ def _effective_outcome(outcome: str, publication) -> str:
         return outcome
     if publication.committed and (publication.rejected or publication.deferred):
         return "partial"
+    if publication.status == Upload.Status.DUPLICATE:
+        return "duplicate"
     if publication.rejected or publication.deferred:
         return "failed"
     if publication.status != Upload.Status.IMPORTED:

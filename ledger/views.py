@@ -20,7 +20,14 @@ from intake.inspect import FileTooLarge, IntakeRejected
 from intake.storage import StorageUnavailable
 from jobs.models import Job
 from ledger.forms import UploadForm
-from ledger.models import Account, BalanceObservation, Correction, Transaction, Upload
+from ledger.models import (
+    Account,
+    BalanceObservation,
+    Correction,
+    DuplicateMatch,
+    Transaction,
+    Upload,
+)
 from reporting.history import (
     account_balance_rows,
     chart_geometry,
@@ -158,6 +165,17 @@ class AccountTransactionsView(LoginRequiredMixin, DetailView):
         return context
 
 
+def _is_overlap_candidate(transaction, peer) -> bool:
+    return (
+        peer.pk != transaction.pk
+        and peer.account_id == transaction.account_id
+        and peer.posted_on == transaction.posted_on
+        and peer.amount_pence == transaction.amount_pence
+        and peer.description == transaction.description
+        and peer.upload_id != transaction.upload_id
+    )
+
+
 def _describe_effect(effect) -> str:
     if effect is None:
         return "Unresolved: excluded from totals (provisional)"
@@ -186,16 +204,19 @@ class ReviewListView(LoginRequiredMixin, TemplateView):
         )
         for transaction in transactions:
             correction = active_correction(transaction)
-            if transaction.needs_review or correction is not None or classify(transaction) is None:
+            duplicate = transaction.duplicate_matches.exists()
+            if transaction.needs_review or correction is not None or duplicate or classify(transaction) is None:
+                if duplicate:
+                    label = "Confirmed duplicate"
+                elif correction is not None:
+                    label = f"Corrected: {correction.get_classification_display()}"
+                else:
+                    label = "Unresolved"
                 rows.append(
                     {
                         "transaction": transaction,
                         "corrected": correction is not None,
-                        "label": (
-                            f"Corrected: {correction.get_classification_display()}"
-                            if correction
-                            else "Unresolved"
-                        ),
+                        "label": label,
                     }
                 )
         context["rows"] = rows
@@ -213,6 +234,47 @@ class ReviewDetailView(LoginRequiredMixin, View):
             Transaction.objects.select_related("account", "upload"), pk=pk
         )
         action = request.POST.get("action")
+        if action == "duplicate":
+            peer = get_object_or_404(Transaction, pk=request.POST.get("peer"))
+            with transaction_db.atomic():
+                locked = {
+                    item.pk: item
+                    for item in Transaction.objects.select_for_update().filter(
+                        pk__in=[transaction.pk, peer.pk]
+                    )
+                }
+                transaction = locked[transaction.pk]
+                peer = locked[peer.pk]
+                if not _is_overlap_candidate(transaction, peer):
+                    return self._render(
+                        request,
+                        pk,
+                        error="Those rows are not an overlap candidate.",
+                        status=400,
+                    )
+                if DuplicateMatch.objects.filter(transaction=peer).exists():
+                    return self._render(
+                        request,
+                        pk,
+                        error=(
+                            "That row is already confirmed as a duplicate; point the "
+                            "decision at the canonical row instead."
+                        ),
+                        status=400,
+                    )
+                if DuplicateMatch.objects.filter(
+                    transaction=transaction, duplicate_of=peer
+                ).exists():
+                    return redirect("ledger:review_detail", pk=pk)
+                DuplicateMatch.objects.create(transaction=transaction, duplicate_of=peer)
+                Transaction.objects.filter(pk__in=[transaction.pk, peer.pk]).update(
+                    needs_review=False
+                )
+            return redirect("ledger:review_detail", pk=pk)
+        if action == "keep_both":
+            transaction.needs_review = False
+            transaction.save(update_fields=["needs_review"])
+            return redirect("ledger:review_detail", pk=pk)
         if action == "revert":
             for correction in transaction.corrections.filter(reverted_at__isnull=True):
                 correction.reverted_at = timezone.now()
@@ -267,11 +329,25 @@ class ReviewDetailView(LoginRequiredMixin, View):
             }
             for value, label in Correction.Classification.choices
         ]
+        candidates = (
+            Transaction.objects.select_related("account", "upload")
+            .filter(
+                account_id=transaction.account_id,
+                posted_on=transaction.posted_on,
+                amount_pence=transaction.amount_pence,
+                description=transaction.description,
+            )
+            .exclude(pk=transaction.pk)
+            .exclude(upload_id=transaction.upload_id)
+            .order_by("pk")
+        )
         return render(
             request,
             self.template_name,
             {
                 "transaction": transaction,
+                "overlap_candidates": candidates,
+                "duplicate_decision": transaction.duplicate_matches.first(),
                 "corrections": transaction.corrections.all(),
                 "active_correction": active,
                 "machine_effect": _describe_effect(classify_source(transaction)),

@@ -13,7 +13,7 @@ interest is income; a cash withdrawal is spending and outgoing.
 from dataclasses import dataclass, field
 from datetime import date
 
-from ledger.models import Account, AccountKind, BalanceObservation, Transaction
+from ledger.models import Account, AccountKind, BalanceObservation, DuplicateMatch, Transaction
 from reporting.history import latest_balances
 
 
@@ -34,6 +34,7 @@ class TotalsReport:
     net_cash_pence: int | None = None
     provisional: bool = False
     unclassified: int = 0
+    needs_review: int = 0
     net_cash_provisional: bool = False
     missing_balance_accounts: list[str] = field(default_factory=list)
     disputed_balance_accounts: list[str] = field(default_factory=list)
@@ -56,6 +57,8 @@ IDENTIFIED_INCOME_TYPES = {"Salary", "Interest"}
 
 def classify(transaction: Transaction) -> RowEffect | None:
     """Confirmed corrections take precedence over machine-derived effects."""
+    if transaction.duplicate_matches.all():
+        return RowEffect()
     correction = active_correction(transaction)
     if correction is not None:
         return effect_for_classification(correction.classification, transaction)
@@ -152,7 +155,7 @@ def compute_totals(period_start: date, period_end: date) -> TotalsReport:
 
     rows = (
         Transaction.objects.select_related("account")
-        .prefetch_related("corrections")
+        .prefetch_related("corrections", "duplicate_matches")
         .filter(posted_on__gte=period_start, posted_on__lte=period_end)
     )
     for row in rows:
@@ -161,6 +164,9 @@ def compute_totals(period_start: date, period_end: date) -> TotalsReport:
             report.unclassified += 1
             report.provisional = True
             continue
+        if row.needs_review and not row.duplicate_matches.all():
+            report.needs_review += 1
+            report.provisional = True
         report.spending_pence += effect.spending_pence
         report.income_pence += effect.income_pence
         report.cash_outgoing_pence += effect.cash_outgoing_pence

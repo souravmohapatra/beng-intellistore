@@ -42,6 +42,48 @@
     </section>
   {% endif %}
 
+  {% if overlap_candidates %}
+    <section aria-labelledby="overlap-heading">
+      <h2 id="overlap-heading">Possible overlap</h2>
+      <p>
+        A different original carries a row with the same date, amount and
+        description. That alone is not proof; both rows stay unless you confirm.
+      </p>
+      <ul>
+        {% for peer in overlap_candidates %}
+          <li>
+            {{ peer.upload.filename }}, page {{ peer.source_page }}, row {{ peer.source_row }}
+            — {{ peer.description }} · {{ peer.amount_display }}
+            <form method="post" action="{% url 'ledger:review_detail' transaction.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="duplicate">
+              <input type="hidden" name="peer" value="{{ peer.pk }}">
+              <button type="submit">Confirm this row duplicates that one</button>
+            </form>
+            <a href="{% url 'ledger:upload_original' peer.upload_id %}">open other source</a>
+          </li>
+        {% endfor %}
+      </ul>
+      <form method="post" action="{% url 'ledger:review_detail' transaction.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="keep_both">
+        <button type="submit">Keep both as distinct</button>
+      </form>
+    </section>
+  {% endif %}
+
+  {% if duplicate_decision %}
+    <section aria-labelledby="duplicate-heading">
+      <h2 id="duplicate-heading">Duplicate decision</h2>
+      <p>
+        Confirmed duplicate of {{ duplicate_decision.duplicate_of.upload.filename }},
+        page {{ duplicate_decision.duplicate_of.source_page }}, row
+        {{ duplicate_decision.duplicate_of.source_row }}. Both sources are retained;
+        this row has no reporting effect.
+      </p>
+    </section>
+  {% endif %}
+
   <section aria-labelledby="correct-heading">
     <h2 id="correct-heading">Confirm a classification</h2>
     <p>Choose deliberately; nothing changes until you save.</p>

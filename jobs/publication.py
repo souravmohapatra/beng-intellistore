@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from jobs.models import SourceMapping
-from ledger.models import BalanceObservation, Transaction, Upload
+from ledger.models import BalanceObservation, DuplicateMatch, Transaction, Upload
 
 SECTION_ACCOUNT_KINDS = {
     "lloyds_current": "current",
@@ -71,6 +71,20 @@ def apply_result(job, body: dict) -> PublicationOutcome:
         return PublicationOutcome(Upload.Status.UNSUPPORTED, 0, 0, 0)
     if outcome == "failed":
         return PublicationOutcome(Upload.Status.NEEDS_REVIEW, 0, 0, 0)
+
+    upload = job.upload
+    if _already_imported(upload):
+        body.setdefault("server_issues", []).append(
+            {
+                "section": "duplicate_original",
+                "code": "already_imported",
+                "message": (
+                    "These exact bytes were already imported for the same account "
+                    "mapping; the receipt is kept but no financial effects were added."
+                ),
+            }
+        )
+        return PublicationOutcome(Upload.Status.DUPLICATE, 0, 0, 0)
 
     identity = body.get("source_identity") or ""
     mapping = SourceMapping.objects.filter(source_identity=identity).first() if identity else None
@@ -200,8 +214,9 @@ def publish_section(upload, section: dict) -> None:
 
     _check_reconciliation(rows, balances, section)
 
+    created = []
     for row in rows:
-        Transaction.objects.create(
+        created.append(Transaction.objects.create(
             account=account,
             upload=upload,
             posted_on=row["posted_on"],
@@ -213,7 +228,8 @@ def publish_section(upload, section: dict) -> None:
             source_page=row["page"],
             source_row=row["row"],
             source_text=row["source_text"],
-        )
+        ))
+    _flag_overlap_candidates(created)
     for balance in balances:
         BalanceObservation.objects.create(
             account=account,
@@ -222,6 +238,36 @@ def publish_section(upload, section: dict) -> None:
             observed_on=balance["observed_on"],
             amount_pence=balance["amount_pence"],
         )
+
+
+def _already_imported(upload) -> bool:
+    prior = Upload.objects.filter(
+        original_id=upload.original_id, status=Upload.Status.IMPORTED
+    ).exclude(pk=upload.pk)
+    return any(
+        item.account_id == upload.account_id
+        and (item.savings_account_id or None) == (upload.savings_account_id or None)
+        for item in prior
+    )
+
+
+def _flag_overlap_candidates(created) -> None:
+    """Flag cross-original rows with identical date/amount/description for review.
+
+    Tuple equality alone is never treated as proof; both rows stay and the
+    affected totals become provisional until a person decides.
+    """
+    for transaction in created:
+        peers = Transaction.objects.filter(
+            account_id=transaction.account_id,
+            posted_on=transaction.posted_on,
+            amount_pence=transaction.amount_pence,
+            description=transaction.description,
+        ).exclude(upload_id=transaction.upload_id)
+        if peers.exists():
+            transaction.needs_review = True
+            transaction.save(update_fields=["needs_review"])
+            peers.update(needs_review=True)
 
 
 def _section_account(upload, section: dict):

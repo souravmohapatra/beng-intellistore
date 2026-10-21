@@ -58,6 +58,7 @@ class Upload(models.Model):
         PENDING = "pending", "Pending"
         UNSUPPORTED = "unsupported", "Unsupported"
         IMPORTED = "imported", "Imported"
+        DUPLICATE = "duplicate", "Duplicate (already imported)"
         NEEDS_REVIEW = "needs_review", "Needs review"
 
     original = models.ForeignKey(
@@ -195,3 +196,24 @@ class Correction(models.Model):
     @property
     def is_active(self) -> bool:
         return self.reverted_at is None
+
+
+class DuplicateMatch(models.Model):
+    """A user-confirmed duplicate relationship between two source rows.
+
+    Both rows and their provenance remain; only the confirmed duplicate's
+    reporting effect is suppressed.
+    """
+
+    transaction = models.ForeignKey(
+        Transaction, on_delete=models.CASCADE, related_name="duplicate_matches"
+    )
+    duplicate_of = models.ForeignKey(
+        Transaction, on_delete=models.CASCADE, related_name="duplicate_targets"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["transaction"], name="one_duplicate_decision")
+        ]
