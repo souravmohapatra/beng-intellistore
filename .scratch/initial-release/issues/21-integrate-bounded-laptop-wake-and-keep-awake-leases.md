@@ -62,6 +62,7 @@ Local implementation, 2026-10-23:
   findings. Tests cover rollback suppression and parallel renewal.
 - Live read-only token parsing against `http://beng-mini-pc:8787` succeeded;
   no POST, wake, lease mutation, deployment or target database change occurred.
+- Implementation commit: `dddf6d3` (not pushed).
 
 Still open: actual sleep-to-wake, create/extend/release/expiry and inhibitor
 behavior, failure/crash recovery, P-06 timing, container-to-controller
