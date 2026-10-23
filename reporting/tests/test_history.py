@@ -1,6 +1,7 @@
 """Behavioral tests for period selection and gap-aware history."""
 
 from datetime import date
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -34,7 +35,8 @@ class HistoryTestCase(TestCase):
 
 class PeriodSelectionTests(HistoryTestCase):
     def test_default_period_remains_trailing_twelve_months(self):
-        page = self.client.get("/")
+        with patch("ledger.views.timezone.localdate", return_value=date(2026, 10, 21)):
+            page = self.client.get("/")
 
         self.assertContains(page, "Reporting period")
         self.assertContains(page, "2025-10-22")
@@ -61,7 +63,8 @@ class PeriodSelectionTests(HistoryTestCase):
         self.assertNotContains(page, "£2,500.00")
 
     def test_invalid_range_falls_back_with_a_visible_message(self):
-        page = self.client.get("/", {"start": "2026-09-01", "end": "2026-08-01"})
+        with patch("ledger.views.timezone.localdate", return_value=date(2026, 10, 21)):
+            page = self.client.get("/", {"start": "2026-09-01", "end": "2026-08-01"})
 
         self.assertContains(page, "not a valid period")
         self.assertContains(page, "2025-10-22")

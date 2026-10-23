@@ -70,7 +70,12 @@ Recommended workflow, not a multi-agent configuration already enabled:
    standards, and inspects whether assertions could miss financial/data-loss bugs.
    Passing tests alone is not completion. Fix findings and rerun affected checks.
 4. Record evidence and make a coherent local commit; then mark the ticket done and
-   select the next available ticket. At milestones run the specified actual-host
+   select the next available ticket. Ticket 06 gates deployment only: while it
+   waits for approval/host inputs, continue available implementation tickets;
+   do not stop the backlog or repeatedly request approval for 06. Preserve
+   declared dependencies and leave unperformed host acceptance open (see
+   [Sourav's continuation instruction](issues/06-verify-the-first-private-deployment-milestone.md#comments)).
+   At milestones run the specified actual-host
    checks and ask for push approval only after the milestone is verified.
 
 Independent read-only review/research can overlap a worker only when explicitly
@@ -168,11 +173,16 @@ independent model labels are real prerequisites, not silently completed work.
 
 ## Approval and next action
 
-Sourav approved this breakdown and requested a local commit as the end-of-planning
-checkpoint. All thirty tickets are published with ready-for-agent status; their
-blockers and operational prerequisites still apply. No application implementation
-or delegation has started. Execution/model routing remains a recommendation.
+Sourav approved this breakdown and the planning checkpoint was committed locally.
+Tickets 01-05 and 07-17 are done; ticket 06 remains deployment-gated. Ticket 18's
+local recovery behavior and tests pass, but target timing calibration under P-06
+remains open, so ticket 18 is not closed and tickets 19 and 22 remain blocked.
 
-Next begin Open a private local account overview, resolving the Mac runtime
-prerequisite before database-dependent tests or installation. Local commit of this
-planning checkpoint does not authorize push or deployment.
+Ticket 20 is in progress: the persisted Europe/London release cursor and
+21:00/catch-up/spring-DST behavior pass local tests. Its automatic trigger,
+no-wake-on-empty path, readiness/status deadline and restart-specific schedule
+proof remain open; P-06 does not specify the exact readiness probe contract.
+Ticket 21 remains blocked by 20. Continue other tickets whose declared
+dependencies are done without claiming real-host checks. Deployment,
+existing-data migrations, destructive operations and Git push remain subject to
+their explicit approval gates.

@@ -1,7 +1,7 @@
-"""Two-process restart check for preserved originals.
+"""Two-process restart check for originals and the nightly schedule cursor.
 
 Each phase runs in its own interpreter, so only the database and data directory
-can carry the receipt across:
+can carry the receipt and schedule state across:
 
     python scripts/restart_check.py upload   # prints the upload id
     python scripts/restart_check.py verify <id>
@@ -13,7 +13,9 @@ client), not a WSGI-server or physical power-loss proof.
 import hashlib
 import os
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -29,6 +31,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile  # noqa: E402
 from django.test import Client  # noqa: E402
 from django.urls import reverse  # noqa: E402
 
+from jobs.management.commands.release_due_jobs import release_due_jobs  # noqa: E402
+from jobs.models import Job  # noqa: E402
 from ledger.models import Account, AccountKind, Upload  # noqa: E402
 
 # A readable, currently unsupported export; digest and size were established
@@ -38,6 +42,7 @@ FIXTURE_SHA256 = "491997df56edfe6c1f165b29c3c5f899f88ae59feed9fe8fa79a962af634ac
 FIXTURE_BYTES = 48
 USERNAME = "restart-check"
 PASSWORD = "local-restart-check-password"
+SCHEDULE_TIME = datetime(2026, 10, 22, 21, 0, tzinfo=ZoneInfo("Europe/London"))
 
 
 def sign_in() -> Client:
@@ -66,7 +71,10 @@ def upload(client: Client) -> str:
     )
     if response.status_code != 302:
         raise SystemExit(f"restart check: upload failed with {response.status_code}")
-    return str(Upload.objects.latest("pk").pk)
+    upload_id = str(Upload.objects.latest("pk").pk)
+    if release_due_jobs(now=SCHEDULE_TIME) != 1:
+        raise SystemExit("restart check: scheduled work was not released")
+    return upload_id
 
 
 def verify(client: Client, upload_id: str) -> None:
@@ -83,6 +91,12 @@ def verify(client: Client, upload_id: str) -> None:
     body = b"".join(response.streaming_content)
     if response.status_code != 200 or body != FIXTURE:
         raise SystemExit("restart check: original could not be reopened")
+
+    if release_due_jobs(now=SCHEDULE_TIME + timedelta(minutes=1)) != 0:
+        raise SystemExit("restart check: schedule cursor replayed a released batch")
+    job = Job.objects.get(upload_id=upload.pk)
+    if job.status != Job.Status.RELEASED:
+        raise SystemExit("restart check: schedule state did not survive process restart")
 
     listing = client.get(reverse("ledger:uploads"))
     if "restart.csv" not in listing.content.decode():

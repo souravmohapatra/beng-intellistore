@@ -18,6 +18,17 @@
   <section aria-labelledby="processing-heading">
     <h2 id="processing-heading">Processing</h2>
     <p>{{ waiting_count }} upload(s) waiting for release.</p>
+    {% if processing_readiness == "queued" %}
+      <p role="status">Queued for processing.</p>
+    {% elif processing_readiness == "waking" %}
+      <p role="status">Waiting for the application worker to become ready.</p>
+    {% elif processing_readiness == "ready" %}
+      <p role="status">Application worker ready.</p>
+    {% elif processing_readiness == "unavailable" %}
+      <p role="status">Unavailable — work remains queued for manual retry or the next batch.</p>
+    {% else %}
+      <p role="status">No processing batch is active.</p>
+    {% endif %}
     <form method="post" action="{% url 'jobs:process_now' %}">
       {% csrf_token %}
       <button type="submit">Process now</button>

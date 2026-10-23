@@ -6,20 +6,33 @@ user session, no database access and no access to unrelated originals.
 
 import hashlib
 import json
+from datetime import timedelta
 from functools import wraps
+from pathlib import Path
 
+from django.conf import settings
 from django.db import connection, transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
-from django.conf import settings
-from pathlib import Path
 
-from jobs.models import Job, JobAttempt, JobEvent, JobResult, WorkerCredential
+from jobs.keep_awake import (
+    begin_keep_awake_for_attempt,
+    end_keep_awake_for_attempt,
+    renew_keep_awake,
+)
+from jobs.models import (
+    Job,
+    JobAttempt,
+    JobEvent,
+    JobResult,
+    WorkerCredential,
+)
 from jobs.publication import apply_result, validate_result_payload
+from jobs.scheduling import mark_worker_ready, refresh_worker_readiness
 from ledger.models import Upload
 
 MAX_BODY_BYTES = 1024 * 1024
@@ -97,6 +110,53 @@ def _open_attempt(job: Job, credential: WorkerCredential) -> JobAttempt:
     return attempt
 
 
+def _lease_deadline():
+    return timezone.now() + timedelta(seconds=settings.WORKER_LEASE_SECONDS)
+
+
+def _retry_delay(attempts_used: int) -> int:
+    delays = settings.WORKER_RETRY_DELAYS or (0,)
+    index = max(0, min(attempts_used - 1, len(delays) - 1))
+    return delays[index]
+
+
+def _expire_stale_attempts():
+    """Reap attempts whose lease lapsed; requeue or fail their jobs."""
+    now = timezone.now()
+    stale = list(
+        JobAttempt.objects.select_for_update().filter(
+            finished_at__isnull=True, lease_expires_at__lt=now
+        )
+    )
+    for attempt in stale:
+        attempt.finished_at = now
+        attempt.outcome = "expired"
+        attempt.save(update_fields=["finished_at", "outcome"])
+        transaction.on_commit(
+            lambda attempt_id=attempt.pk: end_keep_awake_for_attempt(attempt_id)
+        )
+        job = Job.objects.select_for_update().get(pk=attempt.job_id)
+        if job.status != Job.Status.PROCESSING:
+            continue
+        if job.attempts_used >= settings.WORKER_MAX_ATTEMPTS:
+            job.status = Job.Status.FAILED
+            job.last_failure = "Worker lease expired after the final attempt."
+        else:
+            job.status = Job.Status.RELEASED
+            job.available_at = now + timedelta(seconds=_retry_delay(job.attempts_used))
+        job.save(update_fields=["status", "available_at", "last_failure"])
+
+
+def _renew_attempt(attempt: JobAttempt) -> bool:
+    now = timezone.now()
+    if attempt.lease_expires_at is None or attempt.lease_expires_at < now:
+        return False
+    attempt.heartbeat_at = now
+    attempt.lease_expires_at = _lease_deadline()
+    attempt.save(update_fields=["heartbeat_at", "lease_expires_at"])
+    return True
+
+
 def _serialize_claims():
     """Serialize claim decisions; row locks alone miss the empty-PROCESSING case."""
     if connection.vendor == "postgresql":
@@ -111,31 +171,53 @@ def claim(request):
     """Claim the next released job, if no other job is active."""
     with transaction.atomic():
         _serialize_claims()
+        _expire_stale_attempts()
+        now = timezone.now()
+        refresh_worker_readiness(now)
+        mark_worker_ready(now)
         if Job.objects.select_for_update().filter(status=Job.Status.PROCESSING).exists():
             return HttpResponse(status=204)
 
         job = (
             Job.objects.select_for_update()
             .filter(status=Job.Status.RELEASED)
+            .filter(Q(available_at__isnull=True) | Q(available_at__lte=now))
             .order_by("released_at", "pk")
             .first()
         )
         if job is None:
             return HttpResponse(status=204)
 
+        if job.attempts_used >= settings.WORKER_MAX_ATTEMPTS:
+            job.status = Job.Status.FAILED
+            job.last_failure = "Attempt budget exhausted."
+            job.save(update_fields=["status", "last_failure"])
+            return HttpResponse(status=204)
+
+        job.attempts_used += 1
         job.status = Job.Status.PROCESSING
-        job.save(update_fields=["status"])
+        job.available_at = None
+        job.save(update_fields=["status", "attempts_used", "available_at"])
 
         highest = job.attempts.aggregate(highest=Max("number"))["highest"] or 0
         attempt = JobAttempt.objects.create(
-            job=job, number=highest + 1, credential=request.worker
+            job=job,
+            number=highest + 1,
+            credential=request.worker,
+            lease_expires_at=_lease_deadline(),
         )
-
+        transaction.on_commit(
+            lambda attempt_id=attempt.pk: begin_keep_awake_for_attempt(attempt_id)
+        )
     return JsonResponse(
         {
             "job": job.pk,
             "attempt": attempt.pk,
             "result_version": RESULT_VERSION,
+            "lease_expires_at": attempt.lease_expires_at.isoformat(),
+            "attempts_remaining": max(
+                0, settings.WORKER_MAX_ATTEMPTS - job.attempts_used
+            ),
             "source_url": f"/api/worker/jobs/{job.pk}/source/",
             "upload": {
                 "id": job.upload_id,
@@ -145,6 +227,21 @@ def claim(request):
             },
         }
     )
+
+
+@csrf_exempt
+@require_POST
+@worker_required
+def heartbeat(request, job_id):
+    job = get_object_or_404(Job, pk=job_id)
+    try:
+        attempt = _open_attempt(job, request.worker)
+    except ApiError as exc:
+        return _error(exc)
+    if not _renew_attempt(attempt):
+        return JsonResponse({"error": "lease lost"}, status=409)
+    renew_keep_awake(attempt)
+    return JsonResponse({"lease_expires_at": attempt.lease_expires_at.isoformat()})
 
 
 @csrf_exempt
@@ -175,6 +272,8 @@ def progress(request, job_id):
     job = get_object_or_404(Job, pk=job_id)
     try:
         attempt = _open_attempt(job, request.worker)
+        if not _renew_attempt(attempt):
+            return JsonResponse({"error": "lease lost"}, status=409)
         body = _json_body(request)
     except ApiError as exc:
         return _error(exc)
@@ -187,6 +286,7 @@ def progress(request, job_id):
         stage=stage[:MAX_STAGE_LENGTH],
         message=str(body.get("message", ""))[:MAX_MESSAGE_LENGTH],
     )
+    renew_keep_awake(attempt)
     return JsonResponse({"ok": True})
 
 
@@ -202,6 +302,8 @@ def result(request, job_id):
 
     canonical = json.dumps(body, sort_keys=True, separators=(",", ":"))
     payload_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    completed_attempt_id = None
+    response_body = None
 
     with transaction.atomic():
         attempt = (
@@ -214,51 +316,73 @@ def result(request, job_id):
             .first()
         )
         if attempt is None:
-            return JsonResponse({"error": "attempt does not belong to this job"}, status=409)
+            return JsonResponse(
+                {"error": "attempt does not belong to this job"}, status=409
+            )
 
         recorded = JobResult.objects.filter(attempt=attempt).first()
         if recorded is not None:
             if recorded.payload_sha256 == payload_hash:
+                completed_attempt_id = attempt.pk
+                response_body = {
+                    "outcome": recorded.outcome,
+                    "job": job.pk,
+                    "already_recorded": True,
+                }
+            else:
+                return JsonResponse({"error": "conflicting payload"}, status=409)
+        else:
+            if not attempt.is_open:
                 return JsonResponse(
-                    {
-                        "outcome": recorded.outcome,
-                        "job": job.pk,
-                        "already_recorded": True,
-                    }
+                    {"error": "no open attempt for this job"}, status=409
                 )
-            return JsonResponse({"error": "conflicting payload"}, status=409)
+            if (
+                attempt.lease_expires_at is not None
+                and attempt.lease_expires_at < timezone.now()
+            ):
+                return JsonResponse({"error": "lease lost"}, status=409)
 
-        if not attempt.is_open:
-            return JsonResponse({"error": "no open attempt for this job"}, status=409)
+            if body.get("version") != RESULT_VERSION:
+                return JsonResponse(
+                    {"error": "unsupported result version"}, status=400
+                )
+            outcome = body.get("outcome")
+            if outcome not in ALLOWED_OUTCOMES:
+                return JsonResponse({"error": "unsupported outcome"}, status=400)
+            try:
+                validate_result_payload(body)
+            except ValueError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
 
-        if body.get("version") != RESULT_VERSION:
-            return JsonResponse({"error": "unsupported result version"}, status=400)
-        outcome = body.get("outcome")
-        if outcome not in ALLOWED_OUTCOMES:
-            return JsonResponse({"error": "unsupported outcome"}, status=400)
-        try:
-            validate_result_payload(body)
-        except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            publication = apply_result(job, body)
+            upload_status = publication.status
+            effective_outcome = _effective_outcome(outcome, publication)
+            JobResult.objects.create(
+                attempt=attempt,
+                version=RESULT_VERSION,
+                outcome=effective_outcome,
+                payload=body,
+                payload_sha256=payload_hash,
+            )
+            attempt.finished_at = timezone.now()
+            attempt.outcome = effective_outcome
+            attempt.save(update_fields=["finished_at", "outcome"])
+            job.status = Job.Status.COMPLETED
+            job.save(update_fields=["status"])
+            if upload_status != job.upload.status:
+                job.upload.status = upload_status
+                job.upload.save(update_fields=["status"])
+            completed_attempt_id = attempt.pk
+            response_body = {
+                "outcome": effective_outcome,
+                "job": job.pk,
+                "already_recorded": False,
+            }
 
-        publication = apply_result(job, body)
-        upload_status = publication.status
-        effective_outcome = _effective_outcome(outcome, publication)
-        JobResult.objects.create(
-            attempt=attempt,
-            version=RESULT_VERSION,
-            outcome=effective_outcome,
-            payload=body,
-            payload_sha256=payload_hash,
+    if completed_attempt_id is not None:
+        transaction.on_commit(
+            lambda attempt_id=completed_attempt_id: end_keep_awake_for_attempt(
+                attempt_id
+            )
         )
-        attempt.finished_at = timezone.now()
-        attempt.save(update_fields=["finished_at"])
-        job.status = Job.Status.COMPLETED
-        job.save(update_fields=["status"])
-        if upload_status != job.upload.status:
-            job.upload.status = upload_status
-            job.upload.save(update_fields=["status"])
-
-    return JsonResponse(
-        {"outcome": effective_outcome, "job": job.pk, "already_recorded": False}
-    )
+    return JsonResponse(response_body)

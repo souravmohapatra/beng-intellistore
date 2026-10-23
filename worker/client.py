@@ -8,13 +8,19 @@ directory on completion.
 import json
 import shutil
 import tempfile
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
 from pathlib import Path
 
 
 class WorkerError(Exception):
     """The application rejected or failed a worker request."""
+
+
+class LeaseLost(WorkerError):
+    """The job lease expired or another worker took ownership."""
 
 
 class WorkerClient:
@@ -42,13 +48,17 @@ class WorkerClient:
                 return body if raw else json.loads(body)
         except urllib.error.HTTPError as exc:
             detail = exc.read()[:200].decode("utf-8", "replace")
-            raise WorkerError(f"{method} {path} failed: {exc.code} {detail}") from exc
+            error_class = LeaseLost if exc.code == 409 else WorkerError
+            raise error_class(f"{method} {path} failed: {exc.code} {detail}") from exc
 
     def claim(self):
         return self._request("POST", "/api/worker/claims/")
 
     def download_source(self, job_id: int) -> bytes:
         return self._request("GET", f"/api/worker/jobs/{job_id}/source/", raw=True)
+
+    def heartbeat(self, job_id: int):
+        return self._request("POST", f"/api/worker/jobs/{job_id}/heartbeat/")
 
     def progress(self, job_id: int, stage: str, message: str = ""):
         return self._request(
@@ -61,6 +71,19 @@ class WorkerClient:
         return self._request(
             "POST", f"/api/worker/jobs/{job_id}/result/", payload
         )
+
+
+def cleanup_stale(work_root: Path | None, older_than_seconds: int = 24 * 60 * 60) -> list[Path]:
+    """Remove temporary directories left by crashed runs."""
+    removed: list[Path] = []
+    if work_root is None or not Path(work_root).exists():
+        return removed
+    cutoff = time.time() - older_than_seconds
+    for child in Path(work_root).iterdir():
+        if child.is_dir() and child.stat().st_mtime < cutoff:
+            shutil.rmtree(child, ignore_errors=True)
+            removed.append(child)
+    return removed
 
 
 def interpret(data: bytes, content_type: str):
@@ -225,8 +248,20 @@ def build_result(claim: dict, parsed) -> dict:
     }
 
 
+def process_available(
+    client: WorkerClient, work_root: Path | None
+) -> Iterator[dict]:
+    """Yield each completed job until no work remains, then become idle."""
+    while True:
+        result = process_one(client, work_root)
+        if result is None:
+            return
+        yield result
+
+
 def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:
     """Claim and process one job, cleaning temporary files in all cases."""
+    cleanup_stale(work_root)
     claim = client.claim()
     if claim is None:
         return None
@@ -237,9 +272,11 @@ def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:
         data = client.download_source(claim["job"])
         source.write_bytes(data)
         client.progress(claim["job"], "downloaded")
+        client.heartbeat(claim["job"])
 
         parsed = interpret(data, claim["upload"]["content_type"])
         client.progress(claim["job"], "interpreted")
+        client.heartbeat(claim["job"])
 
         submitted = client.submit_result(claim["job"], build_result(claim, parsed))
         return {"job": claim["job"], **submitted}

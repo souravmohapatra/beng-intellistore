@@ -28,7 +28,19 @@
   {% if upload.job %}
     <section aria-labelledby="processing-heading">
       <h2 id="processing-heading">Processing</h2>
-      <p>Job: {{ upload.job.get_status_display }}</p>
+      <p>
+        Job: {{ upload.job.get_status_display }}
+        — {{ upload.job.attempts_used }} attempt(s) used.
+      </p>
+      {% if upload.job.last_failure %}
+        <p role="alert">{{ upload.job.last_failure }}</p>
+      {% endif %}
+      {% if upload.job.status == "failed" %}
+        <form method="post" action="{% url 'jobs:retry' upload.pk %}">
+          {% csrf_token %}
+          <button type="submit">Retry processing</button>
+        </form>
+      {% endif %}
       {% with attempt=upload.job.latest_attempt %}
         {% if attempt %}
           <p>Attempt {{ attempt.number }} by {{ attempt.credential.label }}</p>

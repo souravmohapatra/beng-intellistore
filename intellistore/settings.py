@@ -39,6 +39,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -92,6 +93,32 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Worker lease/retry timings. Provisional until calibrated on the laptop (P-06).
+WORKER_LEASE_SECONDS = int(_env("WORKER_LEASE_SECONDS", "120"))
+WORKER_MAX_ATTEMPTS = int(_env("WORKER_MAX_ATTEMPTS", "3"))
+WORKER_RETRY_DELAYS = tuple(
+    int(value) for value in _env("WORKER_RETRY_DELAYS", "30,120").split(",")
+)
+
+# Private local laptop controller. The URL is unset until deployment supplies a
+# container-reachable private address; no wake happens without one.
+LAPTOP_CONTROLLER = None
+LAPTOP_CONTROLLER_URL = _env("LAPTOP_CONTROLLER_URL", "").strip()
+LAPTOP_CONTROLLER_TIMEOUT_SECONDS = float(
+    _env("LAPTOP_CONTROLLER_TIMEOUT_SECONDS", "5")
+)
+
+# Provisional keep-awake timing; P-06 calibration on the target laptop remains open.
+# Renew only near expiry and add a short extension, so a crash cannot leave an
+# eight-hour inhibition from a single long renewal.
+WORKER_KEEP_AWAKE_SECONDS = max(1, int(_env("WORKER_KEEP_AWAKE_SECONDS", "1200")))
+WORKER_KEEP_AWAKE_RENEW_BEFORE_SECONDS = max(
+    1, int(_env("WORKER_KEEP_AWAKE_RENEW_BEFORE_SECONDS", "300"))
+)
+WORKER_KEEP_AWAKE_EXTENSION_SECONDS = max(
+    1, int(_env("WORKER_KEEP_AWAKE_EXTENSION_SECONDS", "600"))
+)
 
 # Local authoritative data (accepted originals and later recovery material).
 DATA_DIR = Path(_env("INTELLISTORE_DATA_DIR", str(BASE_DIR / "var")))

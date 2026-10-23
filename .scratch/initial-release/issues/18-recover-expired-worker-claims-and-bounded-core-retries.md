@@ -1,6 +1,7 @@
 # 18: Recover expired worker claims and bounded core retries
 
 Status: ready-for-agent
+Claimed by: Codex
 Approval: ticket breakdown approved by Sourav
 Blocked by: 04
 Parent: [First-release specification](../spec.md)
@@ -38,3 +39,13 @@ Optional advice failure does not use core import retry policy; this slice must n
 Not started. Record red/green commands, behavioral demo, review findings/fixes,
 local versus actual-host results, unresolved limits and commit reference when
 available. Passing local tests alone cannot close a required real-host gate.
+
+## Comments
+
+### 2026-10-22 — Codex: local recovery verification
+
+- The recorded red run had 212 tests with only `test_claim_sets_a_lease_and_progress_renews_it` failing: its progress request omitted the required `stage`, so the API correctly returned 400. The test now sends a valid progress event; no API behavior was changed for that failure.
+- `./scripts/smoke.sh` passes: system check, migration drift check, 212 tests, and the two-process restart check (`restart check ok`).
+- Local tests cover lease renewal/expiry, retry/backoff, the three-attempt cap, manual retry, failed-job isolation, and stale temporary-file cleanup. Current settings default to a 120-second lease and 30/120-second retry delays.
+- Those timings are not measured on the target laptop/network. P-06 actual-host calibration remains open; do not close this ticket or claim target timing acceptance until measured there.
+- No deployment or host contact performed; no commit yet.

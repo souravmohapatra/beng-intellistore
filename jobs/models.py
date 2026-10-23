@@ -53,6 +53,9 @@ class Job(models.Model):
         max_length=20, choices=Status.choices, default=Status.WAITING
     )
     released_at = models.DateTimeField(null=True, blank=True)
+    available_at = models.DateTimeField(null=True, blank=True)
+    attempts_used = models.PositiveIntegerField(default=0)
+    last_failure = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -73,6 +76,9 @@ class JobAttempt(models.Model):
     )
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    outcome = models.CharField(max_length=20, blank=True)
 
     class Meta:
         ordering = ["pk"]
@@ -85,6 +91,29 @@ class JobAttempt(models.Model):
     @property
     def is_open(self) -> bool:
         return self.finished_at is None
+
+
+class KeepAwakeLease(models.Model):
+    """The application's own bounded sleep inhibitor lease for one attempt.
+
+    This is deliberately separate from job ownership: the controller lease
+    blocks laptop sleep, while the job attempt lease authorizes work ownership.
+    Only the stored identity may be released.
+    """
+
+    attempt = models.OneToOneField(
+        JobAttempt, on_delete=models.CASCADE, related_name="keep_awake_lease"
+    )
+    lease_id = models.CharField(max_length=128, unique=True)
+    created_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    ceiling_at = models.DateTimeField()
+    last_extended_at = models.DateTimeField(null=True, blank=True)
+    released_at = models.DateTimeField(null=True, blank=True)
+    failure = models.TextField(blank=True)
+
+    def __str__(self) -> str:
+        return f"keep-awake lease {self.lease_id}"
 
 
 class JobEvent(models.Model):
@@ -163,3 +192,23 @@ class PublishedSection(models.Model):
                 fields=["upload", "name"], name="one_section_record_per_upload"
             )
         ]
+
+
+class ProcessingSchedule(models.Model):
+    """Persist schedule progress and worker readiness for a processing batch."""
+
+    class ReadinessStatus(models.TextChoices):
+        IDLE = "idle", "Idle"
+        QUEUED = "queued", "Queued"
+        WAKING = "waking", "Waking"
+        READY = "ready", "Ready"
+        UNAVAILABLE = "unavailable", "Unavailable"
+
+    name = models.CharField(max_length=32, unique=True)
+    last_released_for = models.DateField(null=True, blank=True)
+    readiness_status = models.CharField(
+        max_length=16, choices=ReadinessStatus.choices, default=ReadinessStatus.IDLE
+    )
+    wake_requested_at = models.DateTimeField(null=True, blank=True)
+    readiness_deadline = models.DateTimeField(null=True, blank=True)
+    worker_ready_at = models.DateTimeField(null=True, blank=True)

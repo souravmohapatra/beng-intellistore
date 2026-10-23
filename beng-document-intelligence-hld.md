@@ -6,7 +6,7 @@
 
 **Document version:** 0.3
 
-**Updated:** 2026-10-18
+**Updated:** 2026-10-22
 
 **Initial product:** Personal statement import and financial dashboard for Sourav
 
@@ -122,7 +122,7 @@ flowchart TB
     D -->|Application-coordinated consistent backup; mechanism pending| B
 ```
 
-The worker downloads assigned originals through the authenticated mini-PC application API (concrete endpoint schemas remain to be specified); it does not require NAS reads or independently update authoritative records. The database is a dedicated PostgreSQL Docker container on the mini-PC with local persistent data; exact image/version and paths remain to be selected. The NAS receives backup files, not live database files.
+The worker downloads assigned originals through the authenticated mini-PC application API (concrete endpoint schemas remain to be specified); it does not require NAS reads or independently update authoritative records. The database is configured as PostgreSQL 17.11-alpine in a Docker Compose stack with a local named volume; verify the selected mini-PC Docker daemon, volume location, backup and upgrade behavior before deployment. The NAS receives backup files, not live database files.
 
 The standalone Excalidraw, SVG, and PNG diagrams currently in the workspace were produced for v0.1. They are historical illustrations and do not yet represent this revised worker/API ownership or initial product scope. This document's embedded diagram is the current logical view.
 
@@ -166,8 +166,15 @@ verification.
 
 Use a separate replaceable machine credential scoped to job claims, assigned
 source downloads, progress and result submission. It grants neither the user's
-login privileges nor direct database access. Controller authentication and
-concrete private transport integration still require verification.
+login privileges nor direct database access.
+For controller access, Sourav approved reuse of the existing private/local
+homepage mechanism: GET the controller page for its current action token and
+send `X-CSRF-Token` on wake and lease requests. Authorized read-only inspection
+confirmed these handlers require no separate browser login or machine token.
+This supersedes the earlier scoped-controller-credential proposal; the worker
+API credential above remains required. Keep the controller on private/local
+network paths, do not log its action token, and verify connectivity from the
+deployed Docker container. See the [controller contract](.scratch/initial-release-design/research/keep-awake-contract.md).
 
 Obtains jobs through the application API, reads source material through an agreed mechanism, performs format-specific extraction and validation, optionally obtains local LLM suggestions, and returns results to the application.
 
@@ -371,22 +378,28 @@ permission to process waiting uploads.
 Processing runs daily at 21:00 Europe/London; independent consistent backups run
 at 03:00 in the same timezone. Both are configurable. After mini-PC downtime,
 perform one catch-up run per missed schedule, rather than replaying each missed
-day. Backups use committed state without waiting indefinitely for laptop jobs.
+day. The mini-PC systemd timer is the selected trigger; local unit and production
+Compose configuration are prepared but not installed. Verify the deployed clock,
+Docker endpoint, persistent paths, backups, and catch-up behavior on the host.
+Backups use committed state without waiting indefinitely for laptop jobs.
 
-Allow ten minutes from a wake request to application-worker readiness, then show
-unavailability and retain queued work for manual retry or the next nightly batch.
-Do not continuously send wake requests. This is a startup deadline, not a job
-execution timeout, and needs actual-host validation. Readiness probes,
-heartbeat/expiry timings, retry delays and execution timeouts remain to be
-specified and calibrated. The recovery rules below are agreed.
+Allow ten minutes from a wake request to the first authenticated worker claim;
+that claim confirms application-worker readiness, with no separate health
+endpoint. Controller acknowledgement or cached health is not readiness. If no
+claim arrives, show unavailability and retain queued work for manual retry or
+the next nightly batch. Do not continuously send wake requests. This is a startup
+deadline, not a job execution timeout, and needs actual-host validation. Clock
+fixtures, heartbeat/expiry timings, retry delays and execution timeouts remain to
+be specified and calibrated. The recovery rules below are agreed.
 
 Agreed recovery behavior: a worker renews a temporary job claim; missed renewals
 eventually permit retry, while expired attempts cannot replace newer results.
 Stop processing when lost ownership is detected. Temporary processing failures
 have at most three attempts with increasing delays, then visible failure/manual
 retry. Unsupported formats and repeatable validation failures go directly to
-review. Wake checks do not consume processing attempts. Intervals, delays,
-execution timeouts and the proposed ten-minute readiness limit require calibration.
+review. Wake checks do not consume processing attempts. Heartbeat/expiry intervals,
+retry delays and execution timeouts require calibration; the ten-minute readiness
+limit requires actual-host validation.
 
 Stable attempt identities make repeated identical result submissions safe: a
 commit whose success response was lost returns the prior success on resubmission,
@@ -530,10 +543,10 @@ Actual hardware, wake, storage, recovery, and local-model behavior require real-
 | User-supplied formats | All four text PDFs supplied and inspected; see [inventory](.scratch/initial-release-design/research/statement-format-inventory.md). Establish synthetic/sanitized fixtures and independently reviewed expected results; card cycles do not provide complete August coverage. Revolut scope is personal GBP and savings GBP only, excluding joint/non-GBP/crypto sections; specify savings coverage from the interest-only export. |
 | Input contract | Implement agreed rejection/20 MiB/100-page limits, supported layouts, text/CSV interaction and identity-checked account mapping; build fixtures and validate extraction. |
 | Financial rules | Implement and test agreed normalization, cash/reversal and conservative duplicate/transfer contracts; establish source-supported matching evidence and overlap/year-boundary fixtures. |
-| Data and persistence | PostgreSQL Docker on mini-PC local storage is selected. Specify image/version, paths, exact numeric precision/schema, balance reconstruction, original/record recovery and publication mechanisms. Verify local SSD flush/power-loss behavior before asserting durable acceptance. |
+| Data and persistence | PostgreSQL 17.11-alpine Docker image and a local named volume are configured; verify the selected mini-PC daemon, volume location, image upgrades and recovery. Original paths, precision/schema, balance reconstruction, record recovery and publication mechanisms remain to verify. Check local SSD flush/power-loss behavior before asserting durability. |
 | Worker interface | Source-file access, worker authentication, job claim/expiry, result versioning, stale-result protection, idempotency, retries, restart recovery. |
-| Laptop integration | Inspect existing wake API, readiness and timeout behavior, verify reported GPU, benchmark candidate local model/runtime; preserve existing sleep ownership. |
-| Operations | 21:00 processing/03:00 backup Europe/London and ten-minute readiness deadline agreed; specify probes, observability, concrete images/versions, explicit mini-PC Docker endpoint, and consistent backup/recovery implementation. Mac development/local testing then real-host milestone E2E is agreed; exact local runtime setup remains open. |
+| Laptop integration | Existing private controller client implemented against the page action token and power actions; keep-awake lease state is separate from job ownership. Verify container-to-controller reachability and actual sleep-to-wake, create/extend/release/expiry, failure/crash, eight-hour ceiling, readiness and timing on the target host; verify reported GPU, benchmark candidate local model/runtime, preserve existing sleep ownership, and finish worker drain. |
+| Operations | 21:00 processing/03:00 backup Europe/London and ten-minute readiness deadline agreed; first authenticated worker claim is the readiness signal. Mini-PC systemd timer selected; local unit/Compose config prepared, not installed. Verify deployed clock/timezone, explicit Docker endpoint, container-to-controller private reachability, observability, persistent storage/recovery, and actual-host behavior. Mac development/local testing then real-host milestone E2E is agreed; remaining deployment choices stay open. |
 | Persistent paths | Sourav supplies mini-PC local data and NAS backup destinations during implementation; verify disk capacity and intended Docker daemon. |
 | UI and access | Dashboard/review interactions and phone/desktop scope agreed; implement and verify visual design, accessibility, evidence navigation and private HTTPS/Django login deployment with home/VPN integration. |
 | Performance and testing | Public test interfaces, 100,000-transaction/ten-year envelope, p95 latency conditions and real-host gates agreed. Build and run the tests; record actual performance, failures and release evidence. |

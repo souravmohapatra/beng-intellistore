@@ -33,13 +33,46 @@ P-04, P-05, explicit approval for deployment; host/path inputs.
 
 No real power/lease/model actions or NAS database. Existing native Ollama does not select project deployment policy.
 
+## Comments
+
+### 2026-10-21 — Sourav: continue implementation while deployment is deferred
+
+Ticket 06 gates actual deployment and its real-host acceptance only; it is not
+a stop gate for the implementation backlog. Keep this ticket `needs-info` and
+continue the lowest available ticket whose declared blockers are done. Do not
+stop or repeatedly request deployment approval merely because 06 is unresolved.
+
+Continue local implementation, tests, deployment configuration and runbook
+preparation now. At this checkpoint, finish the existing ticket-18 recovery work
+and its failing test, then continue other available tickets in dependency order.
+For host-dependent tickets, complete useful local preparation and record the
+remaining host checks without claiming those checks passed or closing the ticket.
+Preserve explicit dependencies on 06 (including 26 and 28).
+
+Only deploying to the actual machines or migrations affecting existing data
+requires the corresponding explicit approval; deployment configuration also
+needs the paths, private access and authentication inputs listed above. Prepare
+a concrete reviewable configuration/runbook before requesting deployment approval.
+This instruction authorizes continued implementation, not deployment, destructive
+operations, migrations affecting existing data, or Git push.
+
 ## Completion evidence
 
-Blocked on external inputs, not implementation: deployment to the mini-PC needs
-Sourav's explicit approval (AGENTS: destructive/deployment operations), the
-mini-PC local data path and NAS backup destination (P-04), and private
-hostname/TLS/home-VPN routing plus controller machine authentication (P-05).
-Nothing has been deployed, no host was contacted and no vendor service was
-touched. Prepare configuration and the runbook before requesting approval. Record red/green commands, behavioral demo, review findings/fixes,
-local versus actual-host results, unresolved limits and commit reference when
-available. Passing local tests alone cannot close a required real-host gate.
+Local deployment configuration is prepared but this ticket remains `needs-info`
+and no real-host acceptance is claimed:
+
+- Added `Dockerfile`, `.dockerignore`, `compose.production.yaml`, systemd service
+  and timer units, and README setup/verification instructions.
+- Local production Compose validation/build passed; an isolated database
+  migrated, the app became healthy and rendered the login page, and the release
+  command ran against the same temporary database. Temporary volumes were
+  removed.
+- `systemd-analyze verify` and Europe/London calendar parsing passed in a
+  disposable Debian container. `./scripts/smoke.sh` passed with 222 tests and
+  the two-process restart check.
+
+Still missing: Sourav's mini-PC originals and NAS backup paths, selected Docker
+daemon and capacity/storage checks, private hostname/TLS/home-VPN routing,
+controller machine authentication, explicit deployment approval and all
+actual-host evidence. No host was contacted, no deployment or existing-data
+migration was performed, and no vendor service was touched.

@@ -246,8 +246,7 @@ class WorkerProcessTests(UploadSetupMixin, LiveServerTestCase):
                 "worker",
                 "--base-url",
                 self.live_server_url,
-                "--token",
-                token,
+                f"--token={token}",
                 "--work-root",
                 str(work_root),
             ],
@@ -261,6 +260,57 @@ class WorkerProcessTests(UploadSetupMixin, LiveServerTestCase):
         self.assertIn("unsupported", completed.stdout)
         job = Job.objects.get(upload=upload)
         self.assertEqual(job.status, Job.Status.COMPLETED)
+        self.assertEqual(list(work_root.iterdir()), [])
+
+
+    def test_worker_drains_all_released_jobs_then_exits(self):
+        self.upload(CSV_TEXT, filename="first-drain.txt")
+        self.upload(CSV_TEXT, filename="second-drain.txt")
+        uploads = list(
+            Upload.objects.filter(
+                filename__in=["first-drain.txt", "second-drain.txt"]
+            ).order_by("filename")
+        )
+        self.client.post(reverse("jobs:process_now"))
+        _credential, token = WorkerCredential.issue("laptop-drain")
+        work_root = Path(tempfile.mkdtemp())
+        self.addCleanup(
+            lambda: __import__("shutil").rmtree(work_root, ignore_errors=True)
+        )
+
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "worker",
+                "--base-url",
+                self.live_server_url,
+                f"--token={token}",
+                "--work-root",
+                str(work_root),
+            ],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=90,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        results = [
+            json.loads(line)
+            for line in completed.stdout.splitlines()
+            if line.startswith("{")
+        ]
+        self.assertEqual(len(results), 2)
+        self.assertEqual(
+            {result["job"] for result in results},
+            {upload.job.pk for upload in uploads},
+        )
+        self.assertFalse(
+            Job.objects.filter(
+                pk__in=[upload.job.pk for upload in uploads]
+            ).exclude(status=Job.Status.COMPLETED).exists()
+        )
         self.assertEqual(list(work_root.iterdir()), [])
 
 

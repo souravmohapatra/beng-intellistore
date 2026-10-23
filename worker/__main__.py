@@ -1,4 +1,4 @@
-"""Run one worker cycle against the application.
+"""Drain released work against the application, then exit.
 
 Usage: python -m worker --base-url http://host:8000 --token <token> [--work-root DIR]
 """
@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from worker.client import WorkerClient, process_one
+from worker.client import LeaseLost, WorkerClient, process_available
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,11 +23,16 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--token or WORKER_TOKEN is required")
 
     client = WorkerClient(args.base_url, args.token)
-    result = process_one(client, args.work_root)
-    if result is None:
+    processed = False
+    try:
+        for result in process_available(client, args.work_root):
+            processed = True
+            print(json.dumps(result))
+    except LeaseLost as exc:
+        print(f"lease lost; stopping: {exc}")
+        return 3
+    if not processed:
         print("no work")
-    else:
-        print(json.dumps(result))
     return 0
 
 

@@ -3,7 +3,7 @@
 Status: ready-for-agent
 Release: R1
 Design baseline: decisions accepted through Q76
-Implementation status: in progress on `initial-release-integration` — tickets 01-05 and 07-08 done; 06 blocked on deployment approval; 09-30 not started
+Implementation status: tickets 01-05 and 07-17 done; ticket 18 has local recovery behavior implemented and verified, with P-06 target timing calibration pending; ticket 06 gates deployment only; continue other tickets whose dependencies are done.
 
 ## Problem Statement
 

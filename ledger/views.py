@@ -18,7 +18,8 @@ from django.views.generic import DetailView, ListView, TemplateView
 from intake.accept import accept_upload
 from intake.inspect import FileTooLarge, IntakeRejected
 from intake.storage import StorageUnavailable
-from jobs.models import Job
+from jobs.models import Job, ProcessingSchedule
+from jobs.scheduling import refresh_worker_readiness
 from ledger.forms import UploadForm
 from ledger.models import (
     Account,
@@ -593,6 +594,7 @@ class UploadListView(LoginRequiredMixin, View):
         return initial
 
     def _render(self, request, form, status=200, intake_error=None):
+        schedule = refresh_worker_readiness()
         return render(
             request,
             self.template_name,
@@ -600,6 +602,11 @@ class UploadListView(LoginRequiredMixin, View):
                 "form": form,
                 "uploads": Upload.objects.select_related("account", "original", "job"),
                 "waiting_count": Job.objects.filter(status=Job.Status.WAITING).count(),
+                "processing_readiness": (
+                    schedule.readiness_status
+                    if schedule
+                    else ProcessingSchedule.ReadinessStatus.IDLE
+                ),
                 "intake_error": intake_error,
             },
             status=status,
