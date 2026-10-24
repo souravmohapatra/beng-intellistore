@@ -51,7 +51,7 @@ August coverage.
 
 ## User Stories
 
-1. As Sourav, I want private HTTPS access from home and VPN, so that financial records remain private.
+1. As Sourav, I want private authenticated access. For the first deployment I have selected trusted-LAN direct HTTP with Pi-hole DNS and no reverse proxy; private HTTPS/VPN remains later work before broadening access.
 2. As Sourav, I want one personal login, so that I can use the app without managing additional users.
 3. As Sourav, I want named accounts, so that bank activity and credit-card debt remain distinguishable.
 4. As Sourav, I want to upload supported statement files manually, so that I control what enters the app.
@@ -243,8 +243,10 @@ August coverage.
 
 ### Authentication and privacy
 
-- Use private HTTPS on home/VPN routes with one Sourav login through Django
-  authentication; no public exposure or self-service registration.
+- Use one Sourav login through Django authentication, without public exposure or
+  self-service registration. Sourav explicitly selected LAN-only direct HTTP for
+  initial setup; it does not encrypt credentials, tokens or statements. Private
+  HTTPS/VPN and certificates are deferred, not provided by DNS.
 - Give the worker a separate replaceable credential scoped to claims, assigned
   original downloads, progress and result submission. It grants neither user
   login rights nor direct database access. Protect original/evidence access.
@@ -427,7 +429,7 @@ record the correction before implementing a changed policy.
 | P-02 | Pin compatible runtime/dependency/container versions; specify application schema, result formats, locators, durable original/record recovery and publication/claim mechanisms. | Corresponding implementation slices. |
 | P-03 | Create supported-layout fixtures and independent expected results; establish any text/CSV support explicitly; add overlap/year-boundary evidence. | Enabling each extraction or automated matching rule. |
 | P-04 | Obtain mini-PC local and NAS destination paths; verify headroom, local filesystem/flush behavior and the intended Docker daemon without changing existing services. | Provisioning and any durability claim. |
-| P-05 | Specify/verify private hostname/TLS/home-VPN routes, worker credential handling and controller machine authentication/adapter. | Protected real-host integration. |
+| P-05 | Verify the selected LAN-only hostname/direct-HTTP route, worker credential handling and controller adapter. Private HTTPS/VPN remains deferred before broadening access. Controller page-token protocol was verified read-only. | Selected real-host integration; no public exposure. |
 | P-06 | Calibrate heartbeat/expiry, retry delays, execution/advice timeouts, readiness probes and cap-aware keep-awake behavior; retain accepted bounded failure semantics. | Actual-host job/power acceptance. |
 | P-07 | Specify and prove consistent backup construction, success/retirement, catch-up/DST behavior and isolated restoration. | Backup/recovery release gate. |
 | P-08 | Execute bounded local model/runtime selection with independent hold-out results. | Enabling optional advice, not shipping deterministic/manual-review capability. |

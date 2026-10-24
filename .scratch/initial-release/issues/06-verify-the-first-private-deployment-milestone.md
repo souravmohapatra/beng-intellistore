@@ -14,7 +14,7 @@ An isolated project deployment on the actual mini-PC/laptop can privately upload
 ## Acceptance criteria
 
 - [ ] Prepare reviewable deployment configuration and runbook before seeking deployment approval; obtain local data paths and inspect actual Docker endpoint, capacity and storage behavior.
-- [ ] Verify private hostname/TLS/home-VPN routing and scoped worker connectivity; do not reuse or modify vendor databases or unrelated services.
+- [ ] Verify the selected LAN-only direct HTTP/DNS access and scoped worker connectivity; TLS/reverse proxy/VPN are deferred by Sourav for this deployment. Do not reuse or modify vendor databases or unrelated services.
 - [ ] After authorized deployment, verify real source against a private independent oracle and prove ordinary committed browsing does not require laptop/NAS availability.
 - [ ] Record actual host evidence, rollback/restart procedure and remaining release gates; this is a milestone, not production release or push approval.
 
@@ -71,8 +71,36 @@ and no real-host acceptance is claimed:
   disposable Debian container. `./scripts/smoke.sh` passed with 222 tests and
   the two-process restart check.
 
-Still missing: Sourav's mini-PC originals and NAS backup paths, selected Docker
-daemon and capacity/storage checks, private hostname/TLS/home-VPN routing,
-controller machine authentication, explicit deployment approval and all
-actual-host evidence. No host was contacted, no deployment or existing-data
-migration was performed, and no vendor service was touched.
+Current deployment inputs: Sourav selected `/mnt/media/intelli-store` on the
+mini-PC and LAN-only direct HTTP without proxy/TLS. Read-only SSH verified the
+empty UID/GID1000 directory on local ext4, about257GiB free, and the explicit
+Docker socket `/var/run/docker.sock` serving the snap daemon. Port8017 is unused
+at inspection; scripts recheck before publishing192.168.68.55:8017. The database
+and originals get dedicated `postgres/` and `data/` bind paths.
+
+User-run `beng-mini-pc-setup.sh` and `beng-laptop-setup.sh` now prepare both hosts,
+with local secret generation, login/worker credential provisioning and startup
+units. Laptop SSH timed out; prerequisites are checked by its local script.
+No installation, target migration, firewall/proxy change or power/lease POST
+was performed. NAS destination/backups, target timing and actual-host evidence
+remain open. Source/controller authentication is no longer a blocker.
+
+Setup verification: shell syntax and help paths pass; ShellCheck v0.11.0 passes
+with SC1087 excluded for the unchanged upstream wizard library. Boundary/secret
+preservation checks and both Compose runtime configurations pass. Disposable Linux
+systemd verification and the London calendar parse pass. Actual local production
+app/PostgreSQL-bind/worker containers completed a synthetic HTTP upload and
+Process now flow using the non-root worker; originals remained in the bind path.
+Full `./scripts/smoke.sh`: 254 tests, checks, migrations and restart check pass.
+
+Additional permission found: Docker snap's `removable-media` plug is disconnected.
+Setup offers an explicit `snap connect docker:removable-media` consent for
+`/mnt/media`. Canonical documents its no-new-privileges/AppArmor incompatibility;
+setup uses the same false setting as existing mini-PC containers, retaining
+non-root/read-only/drop-all-capabilities app and worker restrictions. No plug,
+daemon setting, container or host service was changed during inspection.
+
+Two independent read-only reviews found no qualifying introduced defects.
+Their residual risks were addressed locally: release now requires/orders after
+the app startup service, and declining timer activation reports an existing
+active/enabled timer accurately instead of claiming it was disabled.

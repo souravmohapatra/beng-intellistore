@@ -50,9 +50,10 @@ Local implementation, 2026-10-23:
 - `LAPTOP_CONTROLLER_URL` is empty by default; the app does not wake or create
   leases without a configured private URL. Production Compose passes the URL
   and timing settings.
-- The worker now drains every eligible released job and exits when the queue is
-  empty, allowing normal laptop sleep. Host service/container installation,
-  actual wake triggering and drain-under-sleep behavior remain gated.
+- The worker defaults to a one-shot drain and supports `--poll-interval` for the
+  laptop container: drain, wait without a lease while idle, then check for newly
+  released work while awake/resumed. User-run setup and a systemd startup unit
+  are prepared, not installed. Actual wake and sleep/resume remain gated.
 - Tests: `POSTGRES_DB=intellistore_wake_tdd_20261022 .venv/bin/python manage.py test jobs.tests.test_controller jobs.tests.test_keep_awake jobs.tests.test_readiness jobs.tests.test_scheduling`
   passed 40 tests. `./scripts/smoke.sh` passed Django checks, no migration
   drift, 253 tests, migrations and the two-process restart check, including a
@@ -63,6 +64,14 @@ Local implementation, 2026-10-23:
 - Live read-only token parsing against `http://beng-mini-pc:8787` succeeded;
   no POST, wake, lease mutation, deployment or target database change occurred.
 - Implementation commit: `dddf6d3` (not pushed).
+- Setup preparation adds `compose.worker.yaml`, root-only runtime/token
+  provisioning and both host scripts. Poll-after-idle TDD was observed failing
+  before implementation; the 3 worker-process tests then passed. Full smoke now
+  passes 254 tests. Real local app/DB-bind/worker containers completed HTTP
+  upload → Process now → worker completion without a configured controller.
+  Both ordinary hardening and the snap-compatible no-new-privileges=false
+  selection were exercised locally; actual snap/AppArmor behavior remains a
+  user-run host check. NAS backup work is not implemented.
 
 Still open: actual sleep-to-wake, create/extend/release/expiry and inhibitor
 behavior, failure/crash recovery, P-06 timing, container-to-controller

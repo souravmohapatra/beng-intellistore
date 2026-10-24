@@ -1,9 +1,11 @@
 """Behavioral tests for the scoped worker API and job coordination."""
 
 import json
+import select
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from django.test import LiveServerTestCase, TestCase, TransactionTestCase
@@ -312,6 +314,48 @@ class WorkerProcessTests(UploadSetupMixin, LiveServerTestCase):
             ).exclude(status=Job.Status.COMPLETED).exists()
         )
         self.assertEqual(list(work_root.iterdir()), [])
+
+    def test_polling_worker_processes_jobs_released_after_it_becomes_idle(self):
+        self.upload(CSV_TEXT, filename="later-release.txt")
+        job = Job.objects.get(upload__filename="later-release.txt")
+        _, token = WorkerCredential.issue("polling-laptop")
+        with tempfile.TemporaryDirectory() as work_root:
+            process = subprocess.Popen(
+                [
+                    sys.executable, "-m", "worker",
+                    "--base-url", self.live_server_url,
+                    f"--token={token}", "--work-root", work_root,
+                    "--poll-interval", "0.1",
+                ],
+                cwd=BASE_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True,
+            )
+            try:
+                self.assertTrue(select.select([process.stdout], [], [], 15)[0])
+                first_line = process.stdout.readline().strip()
+                self.assertEqual(first_line, "no work")
+                job.refresh_from_db()
+                self.assertEqual(job.status, Job.Status.WAITING)
+                self.client.post(reverse("jobs:process_now"))
+                deadline = time.monotonic() + 15
+                while True:
+                    remaining = deadline - time.monotonic()
+                    self.assertGreater(remaining, 0, "worker never processed the release")
+                    self.assertTrue(
+                        select.select([process.stdout], [], [], remaining)[0]
+                    )
+                    line = process.stdout.readline().strip()
+                    if line != "no work":
+                        result = json.loads(line)
+                        break
+                self.assertEqual(result["job"], job.pk)
+                self.assertEqual(result["outcome"], "unsupported")
+                job.refresh_from_db()
+                self.assertEqual(job.status, Job.Status.COMPLETED)
+                self.assertEqual(list(Path(work_root).iterdir()), [])
+            finally:
+                process.terminate()
+                process.communicate(timeout=10)
 
 
 class ConcurrentClaimTests(UploadSetupMixin, TransactionTestCase):

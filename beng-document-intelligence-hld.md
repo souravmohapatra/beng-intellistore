@@ -44,7 +44,7 @@ Processing favors deterministic parsing, computation, and validation. A local LL
 
 ### 2.1 Initial user and experience
 
-Sourav is the sole user for the first few versions. The product will be evaluated and refined before adoption by Swati. Initial access is private, authenticated, and available on the home network and through private VPN access. Use private HTTPS and a single Sourav login through Django authentication; no public exposure or self-service registration. Concrete routing and certificate setup remain to be verified.
+Sourav is the sole user for the first few versions. The product will be evaluated and refined before adoption by Swati. Use one Sourav login through Django authentication; no public exposure or self-service registration. For the first deployment, Sourav explicitly selected LAN-only direct HTTP and Pi-hole DNS, without reverse proxy/TLS setup. Traffic is unencrypted on that trusted LAN. Private HTTPS/VPN access remains later work and must be verified before broadening access.
 
 The primary experience is a dashboard, rather than a document-search page or conversational interface. Transaction search initially matches the original name/description text. An uploads view exposes preserved sources, processing state, and failures. Review allows correction of extracted information and uncertain classifications.
 
@@ -122,7 +122,7 @@ flowchart TB
     D -->|Application-coordinated consistent backup; mechanism pending| B
 ```
 
-The worker downloads assigned originals through the authenticated mini-PC application API (concrete endpoint schemas remain to be specified); it does not require NAS reads or independently update authoritative records. The database is configured as PostgreSQL 17.11-alpine in a Docker Compose stack with a local named volume; verify the selected mini-PC Docker daemon, volume location, backup and upgrade behavior before deployment. The NAS receives backup files, not live database files.
+The worker downloads assigned originals through the authenticated mini-PC application API; it does not require NAS reads or independently update authoritative records. PostgreSQL 17.11-alpine uses a dedicated local bind path at `/mnt/media/intelli-store/postgres` in the production Compose stack, separate from app originals at `data/`. The selected mini-PC Docker socket and local filesystem/capacity have been inspected read-only; backup, upgrade and host durability behavior remain to be verified. The NAS receives backup files, not live database files.
 
 The standalone Excalidraw, SVG, and PNG diagrams currently in the workspace were produced for v0.1. They are historical illustrations and do not yet represent this revised worker/API ownership or initial product scope. This document's embedded diagram is the current logical view.
 
@@ -143,6 +143,12 @@ The application does not perform model inference or depend on the laptop for ord
 ### 5.2 Mini-PC authoritative storage and NAS backups
 
 Mini-PC local storage holds active originals and authoritative account, transaction, provenance, correction, processing, and lifecycle data. Persistent data outlives individual containers. Laptop loss cannot remove this data; mini-PC disk loss requires recovery from a successful backup. Derived indexes may be rebuilt.
+
+Sourav selected `/mnt/media/intelli-store` on the mini-PC for deployment.
+The setup uses `data/` for originals and `postgres/` for the dedicated database,
+both bind-mounted from that local ext4 filesystem; neither lives on the NAS or
+the Docker daemon's smaller root filesystem. Read-only inspection found the
+base empty, owned by UID/GID 1000, with about 257 GiB available on the mount.
 
 An upload is accepted only after its original and tracking record are durably preserved locally. NAS downtime delays backups and exposes a visible backup error; it does not block normal application use or switch the authority location. The local file/record acceptance and restart-recovery mechanisms remain to be designed and tested. Local storage full/unavailable must produce an explicit intake error.
 
@@ -543,12 +549,12 @@ Actual hardware, wake, storage, recovery, and local-model behavior require real-
 | User-supplied formats | All four text PDFs supplied and inspected; see [inventory](.scratch/initial-release-design/research/statement-format-inventory.md). Establish synthetic/sanitized fixtures and independently reviewed expected results; card cycles do not provide complete August coverage. Revolut scope is personal GBP and savings GBP only, excluding joint/non-GBP/crypto sections; specify savings coverage from the interest-only export. |
 | Input contract | Implement agreed rejection/20 MiB/100-page limits, supported layouts, text/CSV interaction and identity-checked account mapping; build fixtures and validate extraction. |
 | Financial rules | Implement and test agreed normalization, cash/reversal and conservative duplicate/transfer contracts; establish source-supported matching evidence and overlap/year-boundary fixtures. |
-| Data and persistence | PostgreSQL 17.11-alpine Docker image and a local named volume are configured; verify the selected mini-PC daemon, volume location, image upgrades and recovery. Original paths, precision/schema, balance reconstruction, record recovery and publication mechanisms remain to verify. Check local SSD flush/power-loss behavior before asserting durability. |
+| Data and persistence | PostgreSQL 17.11-alpine and originals use dedicated bind paths under `/mnt/media/intelli-store` (`postgres/`, `data/`). Selected local socket `/var/run/docker.sock` currently serves the snap Docker daemon; scripts verify it explicitly. Check image upgrades/recovery and local SSD flush/power-loss behavior before asserting durability. |
 | Worker interface | Source-file access, worker authentication, job claim/expiry, result versioning, stale-result protection, idempotency, retries, restart recovery. |
-| Laptop integration | Existing private controller client implemented against the page action token and power actions; keep-awake lease state is separate from job ownership. Verify container-to-controller reachability and actual sleep-to-wake, create/extend/release/expiry, failure/crash, eight-hour ceiling, readiness and timing on the target host; verify reported GPU, benchmark candidate local model/runtime, preserve existing sleep ownership, and finish worker drain. |
+| Laptop integration | Controller client and worker drain implemented. Setup prepares a laptop Docker worker that polls while awake and resumes after suspend; no application-owned forced sleep. Verify container reachability, real wake/readiness and lease lifecycle/failure/cap behavior, and target timing; laptop SSH was unavailable during setup preparation. |
 | Operations | 21:00 processing/03:00 backup Europe/London and ten-minute readiness deadline agreed; first authenticated worker claim is the readiness signal. Mini-PC systemd timer selected; local unit/Compose config prepared, not installed. Verify deployed clock/timezone, explicit Docker endpoint, container-to-controller private reachability, observability, persistent storage/recovery, and actual-host behavior. Mac development/local testing then real-host milestone E2E is agreed; remaining deployment choices stay open. |
-| Persistent paths | Sourav supplies mini-PC local data and NAS backup destinations during implementation; verify disk capacity and intended Docker daemon. |
-| UI and access | Dashboard/review interactions and phone/desktop scope agreed; implement and verify visual design, accessibility, evidence navigation and private HTTPS/Django login deployment with home/VPN integration. |
+| Persistent paths | Mini-PC base selected: `/mnt/media/intelli-store`. Local ext4 mount/capacity and UID/GID inspected. NAS backup destination remains open. |
+| UI and access | Sourav selected initial LAN-only direct HTTP, no reverse proxy/TLS setup. Bind to `192.168.68.55:8017` (unused at inspection); user supplies Pi-hole DNS. DNS does not remove the port. Django login remains required; HTTP transports credentials/statements unencrypted and must not be publicly forwarded. Phone/accessibility and broader private HTTPS/VPN acceptance remain separate release work. |
 | Performance and testing | Public test interfaces, 100,000-transaction/ten-year envelope, p95 latency conditions and real-host gates agreed. Build and run the tests; record actual performance, failures and release evidence. |
 | Project workflow | Configured in `AGENTS.md` and `docs/agents/`: local Markdown specs/tickets, default triage roles, and single-context domain docs. Local commits are allowed as needed; pushes require milestone completion and explicit approval; no PR required. |
 

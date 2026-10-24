@@ -1,0 +1,45 @@
+# Laptop worker project. It talks to the mini-PC application over its private
+# LAN address and has no database, storage, or controller authority: the only
+# secret it receives is the scoped WORKER_TOKEN.
+#
+# Started by deploy/systemd/intellistore-worker.service with
+# /etc/beng-intellistore-worker/runtime.env, so every value below comes from
+# that root-owned file rather than from the shell or the checkout.
+name: beng-intellistore-worker
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # The image entrypoint is the Django management CLI; the worker is a separate
+    # module, so override it and hand the poll loop its arguments.
+    entrypoint: ["python", "-m", "worker"]
+    command:
+      - --base-url
+      - ${INTELLISTORE_APP_URL:?Set INTELLISTORE_APP_URL in the worker environment file}
+      - --work-root
+      - /work
+      - --poll-interval
+      - ${WORKER_POLL_SECONDS:-30}
+    init: true
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    read_only: true
+    # Scratch space only; no persistent worker volume. Host swap policy still
+    # applies to tmpfs pages.
+    tmpfs:
+      - /tmp
+      - /work:uid=${APP_UID:-1000},gid=${APP_GID:-1000},mode=0700,size=256m
+    security_opt:
+      - no-new-privileges:${INTELLISTORE_NO_NEW_PRIVILEGES:-true}
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    environment:
+      WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN in the worker environment file}
+    # Bounded container logs; the default json-file driver never rotates.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
