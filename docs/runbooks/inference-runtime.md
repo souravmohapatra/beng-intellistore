@@ -87,7 +87,9 @@ sudo journalctl -u intellistore-worker.service -n 50 --no-pager
 ```
 
 Imports work with `INFERENCE_URL` empty: the deterministic pipeline is unchanged
-and review is manual.
+and review is manual. With it set, the worker also drains explicit advice
+requests from Review; those runs never re-import the statement. A failed attempt
+is retried up to `INFERENCE_MAX_ATTEMPTS` and is visible on the review page.
 
 ## 5. Qualify the candidate before claiming advice is enabled
 
