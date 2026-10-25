@@ -153,3 +153,6 @@ LOGOUT_REDIRECT_URL = "/login/"
 BACKUP_STATUS_FILE = _env(
     "BACKUP_STATUS_FILE", str(DATA_DIR / "backup-status.json")
 )
+BACKUP_LAST_SUCCESS_FILE = _env(
+    "BACKUP_LAST_SUCCESS_FILE", str(DATA_DIR / "backup-last-success.json")
+)

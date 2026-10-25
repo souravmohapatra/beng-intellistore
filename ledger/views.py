@@ -349,6 +349,20 @@ class ReviewDetailView(LoginRequiredMixin, View):
                     return self._render(
                         request, pk, error="That suggestion was already resolved.", status=400
                     )
+                newer_correction = locked_transaction.corrections.filter(
+                    reverted_at__isnull=True,
+                    created_at__gt=locked.created_at,
+                )
+                if newer_correction.exists():
+                    return self._render(
+                        request,
+                        pk,
+                        error=(
+                            "A correction was confirmed after this suggestion was "
+                            "generated; review it before accepting stale advice."
+                        ),
+                        status=400,
+                    )
                 for correction in locked_transaction.corrections.filter(
                     reverted_at__isnull=True
                 ):
@@ -797,6 +811,7 @@ class SystemStatusView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         jobs = Job.objects.all()
         advice = AdviceRequest.objects.all()
+        backup_state = _backup_status()
         context.update(
             {
                 "waiting_jobs": jobs.filter(status=Job.Status.WAITING).count(),
@@ -816,19 +831,18 @@ class SystemStatusView(LoginRequiredMixin, TemplateView):
                     status=AdviceRequest.Status.FAILED
                 ).count(),
                 "last_suggestion": ClassificationSuggestion.objects.order_by("-pk").first(),
-                "backup": _backup_status(),
+                "backup": backup_state["attempt"],
+                "backup_last_success": backup_state["last_success"],
             }
         )
         return context
 
 
-def _backup_status():
-    """Read the last backup outcome written by the isolated backup container."""
-    path = Path(settings.BACKUP_STATUS_FILE)
+def _read_backup_file(path):
     try:
         import json
 
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(data, dict):
@@ -838,4 +852,12 @@ def _backup_status():
         "finished_at": str(data.get("finished_at") or ""),
         "generation": str(data.get("generation") or ""),
         "message": str(data.get("message") or ""),
+    }
+
+
+def _backup_status():
+    """Read the last attempt and the last successful generation separately."""
+    return {
+        "attempt": _read_backup_file(settings.BACKUP_STATUS_FILE),
+        "last_success": _read_backup_file(settings.BACKUP_LAST_SUCCESS_FILE),
     }

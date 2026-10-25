@@ -58,13 +58,16 @@ On an isolated mini-PC benchmark copy:
 
 ```bash
 python manage.py seed_benchmark_data --confirm-isolated
-INTELLISTORE_BENCH_PASSWORD=... python scripts/latency_benchmark.py \
+pip install -r requirements-benchmark.txt && python -m playwright install chromium
+INTELLISTORE_BENCH_PASSWORD=... python scripts/browser_latency_benchmark.py \
   --base-url http://<mini-pc>:8017 --username <user> --runs 30 \
-  --output ~/private/latency-report.json
+  --month 2026-08 --output ~/private/latency-browser.json
 ```
 
-Require p95 ≤ 2s for dashboard, period, search, accounts and review; record cold
-load, dataset/browser/network/runtime. Never seed the live database.
+Require p95 ≤ 2s for dashboard, period submit, search and review; record cold
+load, dataset/browser/network/runtime. `scripts/latency_benchmark.py` measures
+HTTP response only and is diagnostic, not the acceptance gate. Never seed the
+live database.
 
 ## 6. Phone and integrated acceptance (tasks16/17)
 
@@ -77,7 +80,7 @@ load, dataset/browser/network/runtime. Never seed the live database.
 
 ## Local verification snapshot
 
-- `env POSTGRES_PORT=55487 .venv/bin/python manage.py test -v 0`:313 tests.
+- `env POSTGRES_PORT=55487 .venv/bin/python manage.py test -v 0`:327 tests.
 - Real isolated backup during concurrent writes; isolated restore verified through
   the application.
 - No live host, private originals or push touched. Local changes are committed

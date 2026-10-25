@@ -174,19 +174,29 @@ def collect_advice(
     client: LocalInferenceClient,
     max_attempts: int = 2,
     retry_delay_seconds: float = 2.0,
+    max_rows: int = 25,
+    on_progress=None,
 ) -> dict[str, list[dict]]:
     """Ask for bounded advice on ambiguous rows; never fail the import.
 
-    Only rows whose source type looks unresolved are sent. Each suggestion is
-    stamped with its source location so the application can attach it to the
-    exact transaction. Advice failure yields no entries for that row.
+    Only rows whose source type looks unresolved are sent, capped by `max_rows`
+    so advice cannot consume the whole job lease. `on_progress` renews the job
+    lease before each request; if it raises, advice stops and the error
+    propagates so the caller does not publish on a lost lease.
     """
     advices: dict[str, list[dict]] = {}
+    sent = 0
     for name, rows, kind in _advice_sections(parsed):
         entries: list[dict] = []
         for row in rows:
+            if sent >= max_rows:
+                advices[name] = entries
+                return advices
             if str(row.transaction_type or "").strip().lower() not in UNRESOLVED_TYPE_HINTS:
                 continue
+            if on_progress is not None:
+                on_progress()
+            sent += 1
             suggestion = _advise_with_retry(
                 client, row, kind, max_attempts, retry_delay_seconds
             )
@@ -236,8 +246,11 @@ def _advise_with_retry(client, row, account_kind, max_attempts, retry_delay_seco
                 import time
 
                 time.sleep(retry_delay_seconds)
-    # Message text may include a URL, never financial contents.
-    logger.warning("local advice unavailable for an unresolved row: %s", last_error)
+    # Only the exception class: model text can echo private description content.
+    logger.warning(
+        "local advice unavailable for an unresolved row (%s)",
+        type(last_error).__name__,
+    )
     return None
 
 

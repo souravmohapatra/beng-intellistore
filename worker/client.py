@@ -338,6 +338,8 @@ def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:
                 retry_delay_seconds=max(
                     0.0, float(os.environ.get("INFERENCE_RETRY_DELAY_SECONDS", "2"))
                 ),
+                max_rows=max(1, int(os.environ.get("ADVICE_MAX_ROWS", "25"))),
+                on_progress=lambda: client.heartbeat(claim["job"]),
             )
 
         submitted = client.submit_result(

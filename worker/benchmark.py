@@ -74,7 +74,9 @@ class BenchmarkReport:
         }
 
 
-def evaluate(cases: list[dict], client: SuggestingClient) -> BenchmarkReport:
+def evaluate(
+    cases: list[dict], client: SuggestingClient, prompt_version: str = "v1"
+) -> BenchmarkReport:
     """Evaluate labelled cases; 'unknown' and errors count as abstentions."""
     report = BenchmarkReport(total=len(cases))
     allowed = {"spending", "income", "transfer", "refund", "unknown"}
@@ -96,6 +98,7 @@ def evaluate(cases: list[dict], client: SuggestingClient) -> BenchmarkReport:
                 description=str(case["description"]),
                 amount_pence=int(case["amount_pence"]),
                 account_kind=str(case.get("account_kind", "current")),
+                prompt_version=prompt_version,
             )
             suggested = str(suggestion.classification.value)
         except Exception as exc:  # bounded failure is reported, not hidden

@@ -48,15 +48,27 @@
     <h2 id="backup-heading">Backup</h2>
     {% if backup %}
       <dl class="detail-list">
-        <dt>Last outcome</dt><dd>{{ backup.status }}</dd>
-        <dt>Finished</dt><dd>{{ backup.finished_at|default:"unknown" }}</dd>
-        <dt>Generation</dt><dd>{{ backup.generation|default:"—" }}</dd>
+        <dt>Last attempt</dt><dd>{{ backup.status }}</dd>
+        <dt>Attempt time</dt><dd>{{ backup.finished_at|default:"unknown" }}</dd>
+        {% if backup.status == "success" %}
+          <dt>Last success</dt><dd>{{ backup.finished_at }} — {{ backup.generation|default:"—" }}</dd>
+        {% elif backup_last_success %}
+          <dt>Last success</dt>
+          <dd>{{ backup_last_success.finished_at }} — {{ backup_last_success.generation|default:"—" }}</dd>
+        {% else %}
+          <dt>Last success</dt><dd>None recorded</dd>
+        {% endif %}
       </dl>
       {% if backup.status == "failed" %}
         <div class="notice notice-error" role="alert">
           <p>Backup failed{% if backup.message %}: {{ backup.message }}{% endif %}. Local data is untouched; fix the destination and rerun.</p>
+          {% if not backup_last_success %}
+            <p>No previously successful backup is recorded; the recovery window is not yet established.</p>
+          {% endif %}
         </div>
       {% endif %}
+    {% elif backup_last_success %}
+      <p>No current attempt outcome; last success {{ backup_last_success.finished_at }} — {{ backup_last_success.generation }}.</p>
     {% else %}
       <p>No backup outcome recorded. No successful backup has been reported to the application.</p>
     {% endif %}

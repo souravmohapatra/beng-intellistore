@@ -41,15 +41,22 @@ Implementation:
 - `jobs/management/commands/seed_benchmark_data.py` seeds 100,000 synthetic
   transactions across ten years into a named isolated database. It refuses
   without `--confirm-isolated` and refuses the configured live database name.
-- `scripts/latency_benchmark.py` logs in over HTTP and records cold plus 30 warm
-  repetitions for dashboard, month-period dashboard, search, accounts and review,
-  reporting p50/p95/max and a `meets_two_seconds` verdict (exit 2 on miss).
+- `scripts/latency_benchmark.py` is an HTTP diagnostic only (server response
+  time), explicitly labelled `mode: http-diagnostic`; it is not the release gate.
+- `scripts/browser_latency_benchmark.py` (optional `requirements-benchmark.txt`)
+  measures submission-to-visible in Chromium for dashboard, period submit, search
+  and review, cold + 30 warm repetitions, p50/p95/max and the 2-second verdict.
 
 Verification:
 - Seeder tests: confirmation required, live-database refusal, one-time seeding
   (50 transactions, 2 balance anchors).
-- Harness smoke against the isolated local app (small dataset, not acceptance):
-  p95 max 26.5ms over 3 runs; JSON written with all paths and conditions.
+- HTTP diagnostic smoke (small dataset, not acceptance): p95 max 26.5ms.
+- Browser harness smoke against the isolated app: dashboard 40.6ms, period
+  122–131ms, search 99–101ms, review 53ms p95 over 3 runs; JSON
+  `mode: browser-submit-to-visible`, `meets_two_seconds: true`. Small synthetic
+  data and a Mac, so this validates the harness only.
+- Playwright is pinned in `requirements-benchmark.txt`; no runtime dependency was
+  added to the application requirements.
 - No live data was seeded; the command guard is tested.
 
 Remaining user-run steps: deploy the benchmark copy on the mini-PC, seed 100,000

@@ -136,23 +136,26 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
         )
 
     def test_malformed_suggestion_does_not_complete_the_request(self):
-        self.request_advice()
-        claimed = self.api("jobs:claim_advice").json()
+        for classification in ("loan", [], {}, None):
+            with self.subTest(classification=classification):
+                self.request_advice()
+                claimed = self.api("jobs:claim_advice").json()
 
-        response = self.api(
-            "jobs:advice_result",
-            {
-                "claim_token": claimed["claim_token"],
-                "outcome": "suggested",
-                "suggestion": self.suggestion("loan"),
-            },
-            args=[claimed["request"]],
-        )
+                response = self.api(
+                    "jobs:advice_result",
+                    {
+                        "claim_token": claimed["claim_token"],
+                        "outcome": "suggested",
+                        "suggestion": self.suggestion(classification),
+                    },
+                    args=[claimed["request"]],
+                )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(ClassificationSuggestion.objects.count(), 0)
-        request_row = AdviceRequest.objects.get()
-        self.assertEqual(request_row.status, AdviceRequest.Status.PENDING)  # retryable
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(ClassificationSuggestion.objects.count(), 0)
+                request_row = AdviceRequest.objects.get()
+                self.assertEqual(request_row.status, AdviceRequest.Status.PENDING)
+                request_row.delete()
 
     def test_failure_is_visible_then_manual_retry_succeeds_without_reimport(self):
         self.request_advice()

@@ -36,7 +36,7 @@ deployment; **user** = requires Sourav's private files, device or decision.
 | AC-24 | local pass | History older than twelve months remains queryable; no purge/archival path exists. |
 | AC-25 | local pass; real runtime open | Advice is validated, source-linked and confirmation-only; unavailable runtime leaves imports/review usable. The real-model demonstration and enablement gate remain task05/06/08. |
 | AC-26 | harness ready; user open | Evaluation harness and gates implemented; private labels and actual-laptop run remain task08. |
-| AC-27 | harness ready; user open | Seeder and latency harness implemented; actual mini-PC 100k measurement remains task15. |
+| AC-27 | browser harness ready; user open | HTTP diagnostic and browser submit-to-visible harnesses implemented; actual mini-PC 100k measurement remains task15. |
 
 ## Operating handoff
 

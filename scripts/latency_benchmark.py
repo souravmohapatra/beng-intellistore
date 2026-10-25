@@ -1,13 +1,17 @@
-"""Measure dashboard/period/search latency against a running application.
+"""HTTP diagnostic for dashboard/period/search response time.
+
+This measures server response completion, not the agreed "submission to usable
+visible" browser journey. It is a diagnostic only: AC-27 requires browser-level
+measurement on the mini-PC.
 
 Usage:
     python scripts/latency_benchmark.py --base-url http://127.0.0.1:8029 \
         --username ... --password-env INTELLISTORE_BENCH_PASSWORD \
         [--runs 30] [--output report.json]
 
-Reports cold first load separately plus p50/p95/max for warm repetitions. This
-is measurement only; run it against an isolated deployment and never seed live
-data. Exit code 2 means the agreed p95 of 2 seconds was missed.
+Reports cold first load separately plus p50/p95/max for warm repetitions. Do not
+present its exit status as the release latency gate. Run it against an isolated
+deployment and never seed live data.
 """
 
 import argparse
@@ -115,17 +119,18 @@ def main():
         "/review/",
     ]
     report = {
+        "mode": "http-diagnostic",
         "base_url": args.base_url,
         "runs": args.runs,
         "results": [measure(session, path, args.runs) for path in paths],
     }
     report["p95_max_ms"] = max(item["p95_ms"] for item in report["results"])
-    report["meets_two_seconds"] = report["p95_max_ms"] <= 2000
+    report["diagnostic_under_two_seconds"] = report["p95_max_ms"] <= 2000
     text = json.dumps(report, indent=2)
     if args.output:
         args.output.write_text(text, encoding="utf-8")
     print(text)
-    return 0 if report["meets_two_seconds"] else 2
+    return 0 if report["diagnostic_under_two_seconds"] else 2
 
 
 if __name__ == "__main__":

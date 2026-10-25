@@ -42,7 +42,7 @@ def main() -> int:
     client = LocalInferenceClient(
         args.url, model=args.model, timeout_seconds=args.timeout
     )
-    report = evaluate(cases, client)
+    report = evaluate(cases, client, prompt_version=args.prompt_version)
     payload = report.as_dict()
     payload["model"] = args.model
     payload["prompt_version"] = args.prompt_version

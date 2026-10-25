@@ -31,6 +31,7 @@ services:
       BACKUP_DIR: /backup
       ORIGINALS_DIR: /data/originals
       STATUS_FILE: /status/backup.json
+      SUCCESS_FILE: /status/backup-last-success.json
       KEEP_GENERATIONS: ${INTELLISTORE_BACKUP_GENERATIONS:-7}
     volumes:
       - type: bind

@@ -47,15 +47,17 @@ Implementation:
   public-surface checks for originals, reports, mappings and corrections.
 
 Verification (controlled client binaries, real filesystem):
-- `jobs.tests.test_backup_scripts`: restores verified originals into an empty
-  target with the requested database name; refuses the live database; rejects an
-  incomplete generation without creating the target; rejects a tampered payload
-  before any write.
-- Real isolated proof: restored a real generation from the isolated PostgreSQL
-  17.11 instance into `intellistore_restore_check2` with the actual
-  `postgres:17.11-alpine` container. The restored database held 20 transactions,
-  124 corrections with exactly one active, 2 originals and 2 accounts; both
-  originals matched the manifest hashes (3073 and 590 bytes). A temporary app on
+- `jobs.tests.test_backup_scripts` (8 restore tests): restores verified originals
+  into an empty target; refuses the live database; rejects an incomplete
+  generation; rejects empty/truncated manifests, unsafe paths, duplicate/omitted
+  originals and tampered payloads before any psql/pg_restore call.
+- Real isolated proof: restored a real generation (taken during concurrent
+  correction writes) into `intellistore_restore_check3`. The restored database
+  held 20 transactions, 184 of 222 corrections (a valid mid-write snapshot), 2
+  originals and 2 accounts; both originals matched the manifest hashes. The
+  application-level one-active-correction invariant is proven separately in
+  `test_review_concurrency`; the direct-SQL writer used for load does not enforce
+  it. A temporary app on
   port8030 pointed at the restored database/originals served overview, search,
   account, review and the original (`200`, `application/pdf`, exact bytes).
 - A deliberately tampered generation is rejected before any write by the same

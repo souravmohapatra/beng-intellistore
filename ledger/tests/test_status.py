@@ -16,12 +16,17 @@ from ledger.tests.support import UploadSetupMixin
 class StatusPageTests(UploadSetupMixin, TestCase):
     def setUp(self):
         super().setUp()
-        self.status_file = Path(tempfile.mkdtemp()) / "backup.json"
-        self.override = override_settings(BACKUP_STATUS_FILE=str(self.status_file))
+        self.status_dir = Path(tempfile.mkdtemp())
+        self.status_file = self.status_dir / "backup.json"
+        self.success_file = self.status_dir / "backup-last-success.json"
+        self.override = override_settings(
+            BACKUP_STATUS_FILE=str(self.status_file),
+            BACKUP_LAST_SUCCESS_FILE=str(self.success_file),
+        )
         self.override.enable()
         self.addCleanup(self.override.disable)
         self.addCleanup(
-            lambda: __import__("shutil").rmtree(self.status_file.parent, ignore_errors=True)
+            lambda: __import__("shutil").rmtree(self.status_dir, ignore_errors=True)
         )
 
     def test_requires_login(self):
@@ -73,6 +78,47 @@ class StatusPageTests(UploadSetupMixin, TestCase):
         self.assertContains(response, "Some advice requests exhausted their attempts")
         self.assertContains(response, "Some processing failed")
         self.assertContains(response, "1 upload(s)", count=1)
+
+    def test_failed_attempt_retains_the_previous_success(self):
+        self.status_file.parent.mkdir(parents=True, exist_ok=True)
+        self.status_file.write_text(
+            json.dumps(
+                {
+                    "status": "failed",
+                    "finished_at": "20260102T030000Z",
+                    "generation": "",
+                    "message": "destination unavailable",
+                }
+            )
+        )
+        self.success_file.write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "finished_at": "20260101T030000Z",
+                    "generation": "/backup/generation-20260101T030000Z",
+                    "message": "",
+                }
+            )
+        )
+
+        response = self.client.get(reverse("ledger:status"))
+
+        self.assertContains(response, "destination unavailable")
+        self.assertContains(response, "20260101T030000Z")
+        self.assertContains(response, "generation-20260101T030000Z")
+        self.assertNotContains(response, "None recorded")
+
+    def test_failure_without_a_success_states_the_window_is_unestablished(self):
+        self.status_file.parent.mkdir(parents=True, exist_ok=True)
+        self.status_file.write_text(
+            json.dumps({"status": "failed", "finished_at": "x", "message": "down"})
+        )
+
+        response = self.client.get(reverse("ledger:status"))
+
+        self.assertContains(response, "None recorded")
+        self.assertContains(response, "recovery window is not yet established")
 
     def test_successful_backup_reports_generation(self):
         self.status_file.parent.mkdir(parents=True, exist_ok=True)

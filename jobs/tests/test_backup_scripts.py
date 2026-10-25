@@ -47,6 +47,7 @@ class ScriptTestCase(SimpleTestCase):
             "PATH": f"{self.bin}:{os.environ['PATH']}",
             "BACKUP_DIR": str(self.backup_dir),
             "STATUS_FILE": str(self.root / "status" / "backup.json"),
+            "SUCCESS_FILE": str(self.root / "status" / "backup-last-success.json"),
             "ORIGINALS_DIR": str(self.originals),
             "PGHOST": "fake-host",
             "PGUSER": "fake-user",
@@ -108,6 +109,45 @@ class BackupGenerationTests(ScriptTestCase):
         incomplete = list(self.backup_dir.glob(".incomplete-*"))
         self.assertEqual(len(incomplete), 1)
         self.assertTrue((incomplete[0] / "FAILED").exists())
+        status = (self.root / "status" / "backup.json").read_text()
+        self.assertIn('"status":"failed"', status)
+
+    def test_missing_originals_parent_fails_without_publishing(self):
+        self.install_fakes()
+        missing = self.root / "missing-parent" / "originals"
+
+        result = self.invoke(BACKUP, ORIGINALS_DIR=str(missing))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(list(self.backup_dir.glob("generation-*")), [])
+        status = (self.root / "status" / "backup.json").read_text()
+        self.assertIn('"status":"failed"', status)
+
+    def test_unreadable_original_payload_fails_without_publishing(self):
+        self.install_fakes()
+        path = self.original("ab/abcd", b"secret")
+        path.chmod(0)
+
+        result = self.invoke(BACKUP)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(list(self.backup_dir.glob("generation-*")), [])
+
+    def test_failure_preserves_the_previous_success_record(self):
+        self.install_fakes()
+        first = self.invoke(BACKUP)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        success_before = (self.root / "status" / "backup-last-success.json").read_text()
+
+        self.fail_dump = True
+        self.install_fakes()
+        second = self.invoke(BACKUP)
+
+        self.assertNotEqual(second.returncode, 0)
+        self.assertEqual(
+            (self.root / "status" / "backup-last-success.json").read_text(),
+            success_before,
+        )
         status = (self.root / "status" / "backup.json").read_text()
         self.assertIn('"status":"failed"', status)
 
@@ -180,6 +220,82 @@ class RestoreGenerationTests(ScriptTestCase):
         log = self.log.read_text()
         self.assertIn("intellistore_restore_check", log)
         self.assertIn("pg_restore", log)
+
+    def test_rejects_an_empty_manifest_before_any_write(self):
+        self.install_fakes()
+        generation = self.build_generation()
+        (generation / "MANIFEST.sha256").write_text("")
+
+        result = self.invoke(
+            RESTORE,
+            [
+                "--generation",
+                str(generation),
+                "--database",
+                "intellistore_restore_check",
+                "--originals-target",
+                str(self.root / "restore-target"),
+            ],
+            LIVE_DATABASE="intellistore",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "restore-target").exists())
+        self.assertFalse(self.log.exists())
+
+    def test_rejects_a_manifest_that_omits_an_original(self):
+        self.install_fakes()
+        generation = self.build_generation()
+        lines = [
+            line
+            for line in (generation / "MANIFEST.sha256").read_text().splitlines()
+            if "originals/" not in line
+        ]
+        (generation / "MANIFEST.sha256").write_text("\n".join(lines) + "\n")
+
+        result = self.invoke(
+            RESTORE,
+            [
+                "--generation",
+                str(generation),
+                "--database",
+                "intellistore_restore_check",
+                "--originals-target",
+                str(self.root / "restore-target"),
+            ],
+            LIVE_DATABASE="intellistore",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not cover every original", result.stderr)
+        self.assertFalse(self.log.exists())
+
+    def test_rejects_an_unsafe_manifest_path(self):
+        self.install_fakes()
+        generation = self.build_generation()
+        content = b"escape"
+        line = (
+            f"{hashlib.sha256(content).hexdigest()}  {len(content)}  ../escape\n"
+        )
+        with (generation / "MANIFEST.sha256").open("a") as manifest:
+            manifest.write(line)
+
+        result = self.invoke(
+            RESTORE,
+            [
+                "--generation",
+                str(generation),
+                "--database",
+                "intellistore_restore_check",
+                "--originals-target",
+                str(self.root / "restore-target"),
+            ],
+            LIVE_DATABASE="intellistore",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unsafe", result.stderr)
+        self.assertFalse(self.log.exists())
 
     def test_refuses_to_restore_over_the_live_database(self):
         self.install_fakes()

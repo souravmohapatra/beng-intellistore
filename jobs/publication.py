@@ -46,7 +46,7 @@ def validate_result_payload(body: dict) -> None:
                 raise ValueError("each section needs a name")
             if section.get("status") not in {"ok", "failed", "ignored", "deferred"}:
                 raise ValueError("section status is not supported")
-            for key in ("transactions", "balances", "issues", "suggestions"):
+            for key in ("transactions", "balances", "issues"):
                 if not isinstance(section.get(key, []), list):
                     raise ValueError(f"section {key} must be a list")
             if section.get("status") == "ok":
@@ -307,7 +307,7 @@ def advisory_fields(entry) -> dict:
     prompt_version = str(entry.get("prompt_version") or "").strip()
     if version != ADVISORY_VERSION:
         raise ValueError("unsupported advisory version")
-    if classification not in ADVISORY_CLASSIFICATIONS:
+    if not isinstance(classification, str) or classification not in ADVISORY_CLASSIFICATIONS:
         raise ValueError("unsupported advisory classification")
     if not 0.0 <= confidence <= 1.0:
         raise ValueError("advice confidence is out of range")

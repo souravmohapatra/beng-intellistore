@@ -118,6 +118,64 @@ class WorkerAdviceTests(TestCase):
 
         self.assertEqual(advices, {"lloyds_current": []})
 
+    def test_logs_do_not_repeat_model_text(self):
+        from worker.advisory import AdvisoryFormatError, collect_advice
+
+        class LeakyClient:
+            def suggest_classification(self, **kwargs):
+                raise AdvisoryFormatError("PRIVATE_MARKER_DESCRIPTION accepted")
+
+        with self.assertLogs("worker.advisory", level="WARNING") as captured:
+            collect_advice(
+                FakeParsed(), LeakyClient(), max_attempts=1, retry_delay_seconds=0
+            )
+
+        output = "\n".join(captured.output)
+        self.assertNotIn("PRIVATE_MARKER_DESCRIPTION", output)
+        self.assertIn("AdvisoryFormatError", output)
+
+    def test_advice_rows_are_capped_and_renew_the_lease(self):
+        from worker.advisory import collect_advice
+
+        class CountingClient:
+            def __init__(self):
+                self.calls = 0
+
+            def suggest_classification(self, **kwargs):
+                self.calls += 1
+                raise RuntimeError("unavailable")
+
+        parsed = FakeParsed()
+        for row in parsed.rows:
+            row.transaction_type = "Others"
+        progress = []
+        client = CountingClient()
+
+        collect_advice(
+            parsed,
+            client,
+            max_attempts=1,
+            retry_delay_seconds=0,
+            max_rows=1,
+            on_progress=lambda: progress.append(True),
+        )
+
+        self.assertEqual(client.calls, 1)
+        self.assertEqual(len(progress), 1)
+
+    def test_lost_lease_during_advice_propagates(self):
+        from worker.advisory import collect_advice
+
+        class Client:
+            def suggest_classification(self, **kwargs):
+                raise AssertionError("should not be called")
+
+        def lose_lease():
+            raise RuntimeError("lease lost")
+
+        with self.assertRaisesRegex(RuntimeError, "lease lost"):
+            collect_advice(FakeParsed(), Client(), on_progress=lose_lease)
+
     def test_process_advice_requests_reports_unexpected_adapter_errors(self):
         from worker.client import process_advice_requests
 
@@ -320,6 +378,9 @@ class AdvicePublicationTests(UploadSetupMixin, TestCase):
                     "not-a-dict",
                     {**self.suggestion(2), "row": 99},
                     self.suggestion(2, explanation=""),
+                    self.suggestion(2, classification=[]),
+                    self.suggestion(2, classification={}),
+                    self.suggestion(2, classification=None),
                 ]
             )
         )
@@ -327,6 +388,14 @@ class AdvicePublicationTests(UploadSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["outcome"], "imported")
         self.assertEqual(ClassificationSuggestion.objects.count(), 0)
+
+    def test_non_list_advice_field_does_not_reject_financial_facts(self):
+        response = self.submit(self.payload({"unexpected": True}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["outcome"], "imported")
+        self.assertEqual(ClassificationSuggestion.objects.count(), 0)
+        self.assertEqual(Transaction.objects.count(), 3)
 
     def test_advice_never_changes_totals_until_explicitly_confirmed(self):
         self.submit(self.payload([self.suggestion(2)]))
@@ -349,6 +418,36 @@ class AdvicePublicationTests(UploadSetupMixin, TestCase):
         self.assertIn("Accepted local suggestion", correction.note)
         dashboard = self.client.get("/?month=2026-08")
         self.assertNotContains(dashboard, "Provisional: 1")
+
+    def test_stale_advice_cannot_override_a_newer_manual_correction(self):
+        self.submit(self.payload([self.suggestion(2)]))
+        unresolved = Transaction.objects.get(source_row=2)
+        suggestion = ClassificationSuggestion.objects.get()
+
+        manual = self.client.post(
+            reverse("ledger:review_detail", args=[unresolved.pk]),
+            {"action": "correct", "classification": "unknown", "note": "manual decision"},
+        )
+        self.assertEqual(manual.status_code, 302)
+
+        stale = self.client.post(
+            reverse("ledger:review_detail", args=[unresolved.pk]),
+            {"action": "accept_advice", "suggestion": suggestion.pk},
+        )
+
+        self.assertEqual(stale.status_code, 400)
+        self.assertContains(
+            stale,
+            "A correction was confirmed after this suggestion",
+            status_code=400,
+        )
+        active = Correction.objects.filter(
+            transaction=unresolved, reverted_at__isnull=True
+        )
+        self.assertEqual(active.count(), 1)
+        self.assertEqual(active.get().note, "manual decision")
+        suggestion.refresh_from_db()
+        self.assertIsNone(suggestion.accepted_at)
 
     def test_dismissing_advice_has_no_financial_effect(self):
         self.submit(self.payload([self.suggestion(2)]))

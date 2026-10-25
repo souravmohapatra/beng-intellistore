@@ -56,9 +56,11 @@ Implementation:
   least privilege. Nothing is deployed.
 
 Verification:
-- `jobs.tests.test_backup_scripts`: 8 passing tests with controlled clients cover
-  manifest publication, failed dump not counted, retention of seven, and failure
-  never retiring a good generation.
+- `jobs.tests.test_backup_scripts`: 14 passing tests cover manifest publication,
+  empty/fresh originals, missing originals parent, unreadable payloads, failed dump,
+  seven-generation retention, failure never retiring a good generation, and
+  separate last-attempt/last-success status (a failure cannot erase the last
+  success).
 - Real isolated proof (Docker Desktop, project `intellistore-ui-check`, PostgreSQL
   17.11 on port55487): ran the actual `postgres:17.11-alpine` backup container
   against the live isolated database while a writer committed corrections every
@@ -75,8 +77,8 @@ Verification:
 - Actual committed Compose invocation was exercised under a scratch project:
   `docker compose -p recovery-smoke -f compose.production.yaml -f
   compose.recovery.yaml run --rm backup` created a complete generation and wrote
-  `data/status/backup.json`; the matching `restore` service created and restored
-  `smoke_restore` with exit0. The script mount is
+  `data/status/backup.json` and `backup-last-success.json`; the matching `restore`
+  service created and restored `smoke_restore` with exit0. The script mount is
   `${INTELLISTORE_COMPOSE_DIR}/scripts`, verified inside the service.
 
 Remaining user-run steps (see `docs/runbooks/backup-restore.md`): set the approved

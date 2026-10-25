@@ -45,7 +45,7 @@ Local evidence:
   `test_controller` cover nightly release/catch-up, Process now, readiness states,
   wake request boundaries, owned leases, expiry/renewal and failure handling.
 - Expired attempt recovery and bounded retries are covered in `test_recovery`.
-- Full suite:313 tests passing; no host was contacted for power/fault actions.
+- Full suite:327 tests passing; no host was contacted for power/fault actions.
 
 Remaining user-run steps (approved window): verify LAN deployment baseline and
 real wake→ready→claim→result→release, deny/unavailable controller, expiry,

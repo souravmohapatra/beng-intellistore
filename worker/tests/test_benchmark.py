@@ -78,6 +78,21 @@ class BenchmarkTests(SimpleTestCase):
         with self.assertRaisesRegex(ValueError, "not an allowed classification"):
             evaluate([self.case("loan", "loan")], ScriptedClient([]))
 
+    def test_prompt_version_is_forwarded_to_the_measured_client(self):
+        calls = []
+
+        class Recorder:
+            def suggest_classification(self, **kwargs):
+                calls.append(kwargs)
+                return FakeSuggestion("spending")
+
+        report = evaluate(
+            [self.case("spending", "spending")], Recorder(), prompt_version="v9"
+        )
+
+        self.assertEqual(report.answered, 1)
+        self.assertEqual(calls[0]["prompt_version"], "v9")
+
     def test_quality_and_time_gates(self):
         passing_cases = [self.case("spending", "spending") for _ in range(50)]
         passing = evaluate(
