@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Accounts — Intellistore{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><h1>{% if accounts %}Your named accounts{% else %}Start with one account{% endif %}</h1>
+  <p class="muted">Name a bank or credit-card account, then add its statement. No bank connection is required.</p></div>
+  {% if accounts %}<a class="button button-secondary" href="{% url 'ledger:uploads' %}">Upload a statement</a>{% endif %}
+</header>
+<div class="grid-two">
+  <section class="panel stack" aria-labelledby="create-heading">
+    <div><h2 id="create-heading">Add an account</h2><p class="muted">Your original statements and the evidence behind your figures stay available.</p></div>
+    {% if form.errors %}<div class="notice notice-error" role="alert">The account was not created. Check the highlighted fields below.</div>{% endif %}
+    <form method="post" action="{% url 'ledger:accounts' %}" class="stack">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% for field in form %}
+      <div class="field">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<p class="muted" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</p>{% endif %}
+        {% if field.errors %}<div class="field-errors" id="{{ field.auto_id }}_error">{{ field.errors }}</div>{% endif %}
+      </div>
+      {% endfor %}
+      <div class="page-actions"><button class="button button-primary" type="submit">Create account and upload</button></div>
+    </form>
+  </section>
+  <section class="panel stack" aria-labelledby="accounts-heading">
+    <h2 id="accounts-heading">{% if accounts %}Accounts already set up{% else %}What happens next{% endif %}</h2>
+    {% if accounts %}
+      <ul class="account-list">
+      {% for account in accounts %}
+        <li class="account"><div><h3>{{ account.name }}</h3><p class="muted">{{ account.get_kind_display }}</p></div><a href="{% url 'ledger:account_transactions' account.pk %}">View transactions<span class="sr-only"> for {{ account.name }}</span></a></li>
+      {% endfor %}
+      </ul>
+    {% else %}
+      <ol class="stack">
+        <li>Create the named account for your statement.</li>
+        <li>Upload a supported statement. Its original is preserved before processing.</li>
+        <li>Process it now or wait for the nightly batch, then review the result.</li>
+      </ol>
+      <p class="muted">Balances remain unknown until supported by statement evidence. Missing history is never shown as a zero balance.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

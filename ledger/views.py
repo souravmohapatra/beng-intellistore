@@ -20,7 +20,7 @@ from intake.inspect import FileTooLarge, IntakeRejected
 from intake.storage import StorageUnavailable
 from jobs.models import Job, ProcessingSchedule
 from jobs.scheduling import refresh_worker_readiness
-from ledger.forms import UploadForm
+from ledger.forms import AccountForm, UploadForm
 from ledger.models import (
     Account,
     BalanceObservation,
@@ -52,6 +52,29 @@ from reporting.transfers import candidates_for
 
 LAST_ACCOUNT_SESSION_KEY = "intake.last_account_id"
 LAST_SAVINGS_SESSION_KEY = "intake.savings_by_primary_account"
+
+
+class AccountListView(LoginRequiredMixin, View):
+    """Create a named account and continue directly to statement intake."""
+
+    def get(self, request):
+        return self._render(request, AccountForm())
+
+    def post(self, request):
+        form = AccountForm(request.POST)
+        if form.is_valid():
+            account = form.save()
+            request.session[LAST_ACCOUNT_SESSION_KEY] = account.pk
+            return redirect("ledger:uploads")
+        return self._render(request, form)
+
+    @staticmethod
+    def _render(request, form):
+        return render(
+            request,
+            "ledger/accounts.html",
+            {"accounts": Account.objects.all(), "form": form},
+        )
 
 
 class AccountOverview(LoginRequiredMixin, ListView):

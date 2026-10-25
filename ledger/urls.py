@@ -8,6 +8,7 @@ app_name = "ledger"
 
 urlpatterns = [
     path("", views.AccountOverview.as_view(), name="overview"),
+    path("accounts/", views.AccountListView.as_view(), name="accounts"),
     path(
         "accounts/<int:pk>/transactions/",
         views.AccountTransactionsView.as_view(),
