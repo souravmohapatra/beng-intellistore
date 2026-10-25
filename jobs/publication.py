@@ -8,7 +8,15 @@ from dataclasses import dataclass
 from datetime import date
 
 from jobs.models import PublishedSection, SourceMapping
-from ledger.models import BalanceObservation, DuplicateMatch, Transaction, Upload
+from ledger.models import (
+    BalanceObservation,
+    ClassificationSuggestion,
+    Correction,
+    DuplicateMatch,
+    Transaction,
+    Upload,
+)
+from reporting.totals import classify_source
 
 SECTION_ACCOUNT_KINDS = {
     "lloyds_current": "current",
@@ -38,7 +46,7 @@ def validate_result_payload(body: dict) -> None:
                 raise ValueError("each section needs a name")
             if section.get("status") not in {"ok", "failed", "ignored", "deferred"}:
                 raise ValueError("section status is not supported")
-            for key in ("transactions", "balances", "issues"):
+            for key in ("transactions", "balances", "issues", "suggestions"):
                 if not isinstance(section.get(key, []), list):
                     raise ValueError(f"section {key} must be a list")
             if section.get("status") == "ok":
@@ -246,6 +254,7 @@ def publish_section(upload, section: dict) -> None:
             source_text=row["source_text"],
         ))
     _flag_overlap_candidates(created)
+    _store_suggestions(created, section.get("suggestions", []))
     PublishedSection.objects.get_or_create(
         upload=upload, name=name, defaults={"account": account}
     )
@@ -276,6 +285,66 @@ def _flag_overlap_candidates(created) -> None:
             transaction.needs_review = True
             transaction.save(update_fields=["needs_review"])
             peers.update(needs_review=True)
+
+
+ADVISORY_VERSION = 1
+MAX_ADVICE_PER_SECTION = 200
+ADVISORY_CLASSIFICATIONS = {choice for choice, _label in Correction.Classification.choices}
+
+
+def _store_suggestions(created, raw_suggestions) -> None:
+    """Store only well-formed advice for rows the deterministic rules left unresolved.
+
+    Advice is optional: malformed entries are dropped rather than failing the
+    import, and a suggestion never changes a financial fact by itself. Duplicate
+    or contradictory advice for one row is kept separate for the user to review.
+    """
+    if not isinstance(raw_suggestions, list):
+        return
+    by_location = {(row.source_page, row.source_row): row for row in created}
+    stored = 0
+    for entry in raw_suggestions:
+        if stored >= MAX_ADVICE_PER_SECTION:
+            return
+        if not isinstance(entry, dict):
+            continue
+        try:
+            page = _positive_int(entry["page"])
+            row_number = _positive_int(entry["row"])
+            version = _bounded_int(entry["version"])
+            confidence = float(entry["confidence"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        classification = entry.get("classification")
+        explanation = str(entry.get("explanation") or "").strip()
+        model = str(entry.get("model") or "").strip()
+        prompt_version = str(entry.get("prompt_version") or "").strip()
+        transaction = by_location.get((page, row_number))
+        if (
+            transaction is None
+            or version != ADVISORY_VERSION
+            or classification not in ADVISORY_CLASSIFICATIONS
+            or not 0.0 <= confidence <= 1.0
+            or not explanation
+            or not model
+            or len(explanation) > 500
+            or len(model) > 100
+            or len(prompt_version) > 20
+        ):
+            continue
+        if classify_source(transaction) is not None:
+            # Deterministic evidence already resolves this row; advice adds nothing.
+            continue
+        ClassificationSuggestion.objects.create(
+            transaction=transaction,
+            version=version,
+            classification=classification,
+            confidence=confidence,
+            explanation=explanation[:500],
+            model=model[:100],
+            prompt_version=prompt_version[:20],
+        )
+        stored += 1
 
 
 def _section_account(upload, section: dict):

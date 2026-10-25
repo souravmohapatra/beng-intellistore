@@ -6,6 +6,7 @@ directory on completion.
 """
 
 import json
+import os
 import shutil
 import tempfile
 import time
@@ -13,6 +14,8 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
+
+from worker.advisory import client_from_env, collect_advice
 
 
 class WorkerError(Exception):
@@ -126,7 +129,7 @@ def _page_tokens(page) -> list[tuple[float, float, str]]:
     return tokens
 
 
-def build_result(claim: dict, parsed) -> dict:
+def build_result(claim: dict, parsed, advices: dict | None = None) -> dict:
     if parsed is None:
         return {
             "version": claim["result_version"],
@@ -175,6 +178,7 @@ def build_result(claim: dict, parsed) -> dict:
             }
             for balance in parsed.balances
         ],
+        "suggestions": (advices or {}).get(parsed.section_name, []),
         "stated_totals": {
             "money_in_pence": getattr(parsed, "money_in_pence", None),
             "money_out_pence": getattr(parsed, "money_out_pence", None),
@@ -218,6 +222,7 @@ def build_result(claim: dict, parsed) -> dict:
                 }
                 for balance in savings.balances
             ],
+            "suggestions": (advices or {}).get("revolut_savings_gbp", []),
             # No source-stated totals apply to an interest-only export.
             "stated_totals": {},
         }
@@ -278,7 +283,21 @@ def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:
         client.progress(claim["job"], "interpreted")
         client.heartbeat(claim["job"])
 
-        submitted = client.submit_result(claim["job"], build_result(claim, parsed))
+        advices = {}
+        inference = client_from_env()
+        if inference is not None and parsed is not None:
+            advices = collect_advice(
+                parsed,
+                inference,
+                max_attempts=max(1, int(os.environ.get("INFERENCE_MAX_ATTEMPTS", "2"))),
+                retry_delay_seconds=max(
+                    0.0, float(os.environ.get("INFERENCE_RETRY_DELAY_SECONDS", "2"))
+                ),
+            )
+
+        submitted = client.submit_result(
+            claim["job"], build_result(claim, parsed, advices)
+        )
         return {"job": claim["job"], **submitted}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

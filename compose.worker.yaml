@@ -24,6 +24,9 @@ services:
       - ${WORKER_POLL_SECONDS:-30}
     init: true
     user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    # Host networking lets the worker reach the loopback-bound inference service
+    # on this laptop (127.0.0.1:11435) without exposing it to the LAN.
+    network_mode: host
     read_only: true
     # Scratch space only; no persistent worker volume. Host swap policy still
     # applies to tmpfs pages.
@@ -37,6 +40,12 @@ services:
     restart: unless-stopped
     environment:
       WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN in the worker environment file}
+      # Optional local advice. Leaving INFERENCE_URL empty keeps advice disabled.
+      INFERENCE_URL: ${INFERENCE_URL:-}
+      INFERENCE_MODEL: ${INFERENCE_MODEL:-qwen2.5:7b-instruct}
+      INFERENCE_TIMEOUT_SECONDS: ${INFERENCE_TIMEOUT_SECONDS:-10}
+      INFERENCE_MAX_ATTEMPTS: ${INFERENCE_MAX_ATTEMPTS:-2}
+      INFERENCE_RETRY_DELAY_SECONDS: ${INFERENCE_RETRY_DELAY_SECONDS:-2}
     # Bounded container logs; the default json-file driver never rotates.
     logging:
       driver: json-file

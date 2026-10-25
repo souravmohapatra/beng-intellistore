@@ -120,6 +120,18 @@ WORKER_KEEP_AWAKE_EXTENSION_SECONDS = max(
     1, int(_env("WORKER_KEEP_AWAKE_EXTENSION_SECONDS", "600"))
 )
 
+# Isolated local LLM advisory inference. Unset URL keeps advice disabled.
+# D1: dedicated Docker inference service on the laptop; native Ollama is untouched.
+INFERENCE_URL = _env("INFERENCE_URL", "").strip()
+INFERENCE_MODEL = _env("INFERENCE_MODEL", "qwen2.5:7b-instruct")
+INFERENCE_PROMPT_VERSION = _env("INFERENCE_PROMPT_VERSION", "v1")
+INFERENCE_TIMEOUT_SECONDS = float(_env("INFERENCE_TIMEOUT_SECONDS", "10"))
+INFERENCE_MAX_ATTEMPTS = max(1, int(_env("INFERENCE_MAX_ATTEMPTS", "2")))
+INFERENCE_RETRY_DELAY_SECONDS = max(
+    0, int(_env("INFERENCE_RETRY_DELAY_SECONDS", "2"))
+)
+INFERENCE_ENABLED = _env_bool("INFERENCE_ENABLED", default=False)
+
 # Local authoritative data (accepted originals and later recovery material).
 DATA_DIR = Path(_env("INTELLISTORE_DATA_DIR", str(BASE_DIR / "var")))
 

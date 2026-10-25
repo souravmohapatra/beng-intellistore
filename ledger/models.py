@@ -198,6 +198,35 @@ class Correction(models.Model):
         return self.reverted_at is None
 
 
+class ClassificationSuggestion(models.Model):
+    """Optional local-model advice for one unresolved transaction.
+
+    A suggestion is not a financial fact and has no reporting effect. Only an
+    explicit user confirmation creates a correction. Suggestions are retained
+    with their provenance so the advice shown can be audited later.
+    """
+
+    transaction = models.ForeignKey(
+        Transaction, on_delete=models.CASCADE, related_name="suggestions"
+    )
+    version = models.PositiveSmallIntegerField()
+    classification = models.CharField(max_length=20, choices=Correction.Classification.choices)
+    confidence = models.FloatField()
+    explanation = models.TextField()
+    model = models.CharField(max_length=100)
+    prompt_version = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    dismissed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["pk"]
+
+    @property
+    def is_open(self) -> bool:
+        return self.accepted_at is None and self.dismissed_at is None
+
+
 class DuplicateMatch(models.Model):
     """A user-confirmed duplicate relationship between two source rows.
 

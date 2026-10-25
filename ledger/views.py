@@ -24,6 +24,7 @@ from ledger.forms import AccountForm, UploadForm
 from ledger.models import (
     Account,
     BalanceObservation,
+    ClassificationSuggestion,
     Correction,
     DuplicateMatch,
     ReversalLink,
@@ -262,6 +263,59 @@ class ReviewDetailView(LoginRequiredMixin, View):
             Transaction.objects.select_related("account", "upload"), pk=pk
         )
         action = request.POST.get("action")
+        if action == "dismiss_advice":
+            suggestion = get_object_or_404(
+                ClassificationSuggestion,
+                pk=request.POST.get("suggestion"),
+                transaction=transaction,
+                accepted_at__isnull=True,
+                dismissed_at__isnull=True,
+            )
+            suggestion.dismissed_at = timezone.now()
+            suggestion.save(update_fields=["dismissed_at"])
+            return redirect("ledger:review_detail", pk=pk)
+        if action == "accept_advice":
+            suggestion = get_object_or_404(
+                ClassificationSuggestion,
+                pk=request.POST.get("suggestion"),
+                transaction=transaction,
+                accepted_at__isnull=True,
+                dismissed_at__isnull=True,
+            )
+            if not classification_applies(suggestion.classification, transaction):
+                return self._render(
+                    request,
+                    pk,
+                    error=(
+                        "That suggestion does not match the source's signed "
+                        "direction; no correction was saved."
+                    ),
+                    status=400,
+                )
+            with transaction_db.atomic():
+                locked = ClassificationSuggestion.objects.select_for_update().get(
+                    pk=suggestion.pk
+                )
+                if not locked.is_open:
+                    return self._render(
+                        request, pk, error="That suggestion was already resolved.", status=400
+                    )
+                for correction in transaction.corrections.filter(
+                    reverted_at__isnull=True
+                ):
+                    correction.reverted_at = timezone.now()
+                    correction.save(update_fields=["reverted_at"])
+                Correction.objects.create(
+                    transaction=transaction,
+                    classification=locked.classification,
+                    note=(
+                        f"Accepted local suggestion ({locked.model}, "
+                        f"prompt {locked.prompt_version}): {locked.explanation}"
+                    )[:1000],
+                )
+                locked.accepted_at = timezone.now()
+                locked.save(update_fields=["accepted_at"])
+            return redirect("ledger:review_detail", pk=pk)
         if action == "duplicate":
             peer = get_object_or_404(Transaction, pk=request.POST.get("peer"))
             with transaction_db.atomic():
@@ -446,6 +500,13 @@ class ReviewDetailView(LoginRequiredMixin, View):
             pk=pk,
         )
         active = active_correction(transaction)
+        suggestion = (
+            transaction.suggestions.filter(
+                accepted_at__isnull=True, dismissed_at__isnull=True
+            )
+            .order_by("-pk")
+            .first()
+        )
         options = [
             {
                 "value": value,
@@ -482,6 +543,7 @@ class ReviewDetailView(LoginRequiredMixin, View):
                 "duplicate_decision": transaction.duplicate_matches.first(),
                 "corrections": transaction.corrections.all(),
                 "active_correction": active,
+                "suggestion": suggestion,
                 "machine_effect": _describe_effect(classify_source(transaction)),
                 "options": options,
                 "correction_error": error,

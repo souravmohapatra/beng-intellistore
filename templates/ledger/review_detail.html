@@ -47,6 +47,47 @@
       </dl>
     </aside>
     <div class="stack">
+      {% if suggestion %}
+        <section class="panel" aria-labelledby="advice-heading">
+          <h2 id="advice-heading">Local suggestion</h2>
+          <p class="muted">
+            Advisory only. It is not a financial fact and changes nothing until
+            you confirm it. Machine: {{ suggestion.model }}, prompt
+            {{ suggestion.prompt_version }}; confidence
+            {{ suggestion.confidence|floatformat:2 }}.
+          </p>
+          <p>
+            <span class="badge">{{ suggestion.get_classification_display }}</span>
+            {{ suggestion.explanation }}
+          </p>
+          {% if suggestion.classification != "unknown" %}
+            <div class="page-actions">
+              <form method="post" action="{% url 'ledger:review_detail' transaction.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="accept_advice">
+                <input type="hidden" name="suggestion" value="{{ suggestion.pk }}">
+                <button type="submit" class="button button-primary">
+                  Confirm suggested classification
+                </button>
+              </form>
+              <form method="post" action="{% url 'ledger:review_detail' transaction.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="dismiss_advice">
+                <input type="hidden" name="suggestion" value="{{ suggestion.pk }}">
+                <button type="submit" class="button button-secondary">Dismiss suggestion</button>
+              </form>
+            </div>
+          {% else %}
+            <p class="muted">The model abstained; resolve this row manually.</p>
+            <form method="post" action="{% url 'ledger:review_detail' transaction.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="dismiss_advice">
+              <input type="hidden" name="suggestion" value="{{ suggestion.pk }}">
+              <button type="submit" class="button button-secondary">Dismiss suggestion</button>
+            </form>
+          {% endif %}
+        </section>
+      {% endif %}
       <section class="panel" aria-labelledby="correct-heading">
         <h2 id="correct-heading">Confirm a classification</h2>
         <p class="muted">
