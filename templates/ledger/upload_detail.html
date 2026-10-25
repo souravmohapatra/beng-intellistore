@@ -1,81 +1,122 @@
 {% extends "base.html" %}
 {% block title %}{{ upload.filename }} — Statement Intelligence{% endblock %}
 {% block content %}
-  <h1>{{ upload.filename }}</h1>
+  <header class="page-header">
+    <div>
+      <h1>{{ upload.filename }}</h1>
+      <p class="muted">Receipt for one preserved original on {{ upload.account.name }}.</p>
+    </div>
+    <div class="page-actions">
+      <a class="button button-secondary" href="{% url 'ledger:uploads' %}">Back to uploads</a>
+      <a class="button button-primary" href="{% url 'ledger:upload_original' upload.pk %}">Open original</a>
+    </div>
+  </header>
+
   {% if upload.review_note %}
-    <p role="alert">{{ upload.review_note }}</p>
+    <div class="notice notice-warning" role="alert">
+      <p>{{ upload.review_note }}</p>
+    </div>
   {% endif %}
-  <dl>
-    <dt>Named account</dt>
-    <dd>{{ upload.account.name }} ({{ upload.account.get_kind_display }})</dd>
-    <dt>Status</dt>
-    <dd>{{ upload.get_status_display }}</dd>
-    {% if upload.status == "unsupported" %}
-      <dd>
-        This layout is not a supported statement format yet, so no transactions
-        were imported. The original is preserved for review.
-      </dd>
-    {% endif %}
-    <dt>Received</dt>
-    <dd>{{ upload.received_at|date:"Y-m-d H:i:s T" }}</dd>
-    <dt>Preserved original</dt>
-    <dd>
-      {{ upload.original.byte_size }} bytes, SHA-256 {{ upload.original.sha256 }}
-      — <a href="{% url 'ledger:upload_original' upload.pk %}">open original</a>
-    </dd>
-  </dl>
 
-  {% if upload.job %}
-    <section aria-labelledby="processing-heading">
-      <h2 id="processing-heading">Processing</h2>
-      <p>
-        Job: {{ upload.job.get_status_display }}
-        — {{ upload.job.attempts_used }} attempt(s) used.
-      </p>
-      {% if upload.job.last_failure %}
-        <p role="alert">{{ upload.job.last_failure }}</p>
-      {% endif %}
-      {% if upload.job.status == "failed" %}
-        <form method="post" action="{% url 'jobs:retry' upload.pk %}">
-          {% csrf_token %}
-          <button type="submit">Retry processing</button>
-        </form>
-      {% endif %}
-      {% with attempt=upload.job.latest_attempt %}
-        {% if attempt %}
-          <p>Attempt {{ attempt.number }} by {{ attempt.credential.label }}</p>
-          {% if attempt.events.all %}
-            <ol>
-              {% for event in attempt.events.all %}
-                <li>{{ event.stage }}{% if event.message %} — {{ event.message }}{% endif %}</li>
-              {% endfor %}
-            </ol>
-          {% endif %}
-          {% if attempt.result %}
-            <p>Outcome: {{ attempt.result.outcome }}</p>
-            <ul>
-              {% for section in attempt.result.payload.sections %}
-                {% if section.status != "ok" %}
-                  <li>{{ section.name }} — {{ section.status }}{% if section.issues %}: {{ section.issues.0.message }}{% endif %}</li>
-                {% endif %}
-                {% for issue in section.issues %}
-                  {% if section.status == "ok" %}
-                    <li>{{ section.name }} — {{ issue.code }}: {{ issue.message }}</li>
-                  {% endif %}
-                {% endfor %}
-              {% endfor %}
-              {% for issue in attempt.result.payload.issues %}
-                <li>{{ issue.code }}{% if issue.message %}: {{ issue.message }}{% endif %}</li>
-              {% endfor %}
-              {% for issue in attempt.result.payload.server_issues %}
-                <li>{{ issue.section }} — {{ issue.code }}: {{ issue.message }}</li>
-              {% endfor %}
-            </ul>
-          {% endif %}
+  <div class="stack">
+    <section class="panel" aria-labelledby="receipt-heading">
+      <h2 id="receipt-heading">Receipt</h2>
+      <dl class="detail-list">
+        <dt>Named account</dt>
+        <dd>{{ upload.account.name }} ({{ upload.account.get_kind_display }})</dd>
+        {% if upload.savings_account %}
+          <dt>Savings account</dt>
+          <dd>{{ upload.savings_account.name }} ({{ upload.savings_account.get_kind_display }})</dd>
         {% endif %}
-      {% endwith %}
+        <dt>Receipt status</dt>
+        <dd>
+          <span class="badge{% if upload.status == 'needs_review' %} badge-warning{% elif upload.status == 'unsupported' %} badge-error{% elif upload.status == 'duplicate' %} badge-neutral{% elif upload.status == 'pending' %} badge-neutral{% endif %}">{{ upload.get_status_display }}</span>
+        </dd>
+        <dt>Received</dt>
+        <dd>{{ upload.received_at|date:"Y-m-d H:i:s T" }}</dd>
+        <dt>Preserved original</dt>
+        <dd>
+          {{ upload.original.byte_size }} bytes, SHA-256
+          <span class="muted">{{ upload.original.sha256 }}</span>
+        </dd>
+      </dl>
+      {% if upload.status == "unsupported" %}
+        <div class="notice notice-warning">
+          <p>
+            This layout is not a supported statement format yet, so no transactions
+            were imported. The original is preserved for review.
+          </p>
+        </div>
+      {% endif %}
     </section>
-  {% endif %}
 
-  <p><a href="{% url 'ledger:uploads' %}">Back to uploads</a></p>
+    {% if upload.job %}
+      <section class="panel" aria-labelledby="processing-heading">
+        <h2 id="processing-heading">Processing</h2>
+        <dl class="detail-list">
+          <dt>Job status</dt>
+          <dd>
+            <span class="badge{% if upload.job.status == 'failed' %} badge-error{% elif upload.job.status == 'waiting' %} badge-warning{% elif upload.job.status == 'released' %} badge-neutral{% elif upload.job.status == 'processing' %} badge-neutral{% endif %}">{{ upload.job.get_status_display }}</span>
+          </dd>
+        </dl>
+        <p>{{ upload.job.attempts_used }} attempt(s) used.</p>
+        {% if upload.job.status == "waiting" %}
+          <p class="muted">Your original is safe. Process the queue now, or leave it for the nightly batch.</p>
+          <a class="button button-secondary" href="{% url 'ledger:uploads' %}#processing-heading">Open processing queue</a>
+        {% elif upload.job.status == "completed" %}
+          <div class="page-actions">
+            <a class="button button-primary" href="{% url 'ledger:account_transactions' upload.account_id %}">View account transactions</a>
+            <a class="button button-secondary" href="{% url 'ledger:review' %}">Review decisions</a>
+          </div>
+        {% endif %}
+        {% if upload.job.last_failure %}
+          <div class="notice notice-error" role="alert">
+            <p>{{ upload.job.last_failure }}</p>
+          </div>
+        {% endif %}
+        {% if upload.job.status == "failed" %}
+          <form method="post" action="{% url 'jobs:retry' upload.pk %}">
+            {% csrf_token %}
+            <div class="page-actions">
+              <button type="submit" class="button button-primary">Retry processing</button>
+            </div>
+          </form>
+        {% endif %}
+        {% with attempt=upload.job.latest_attempt %}
+          {% if attempt %}
+            <h3>Latest attempt</h3>
+            <p>Attempt {{ attempt.number }} by {{ attempt.credential.label }}</p>
+            {% if attempt.events.all %}
+              <ol>
+                {% for event in attempt.events.all %}
+                  <li>{{ event.stage }}{% if event.message %} — {{ event.message }}{% endif %}</li>
+                {% endfor %}
+              </ol>
+            {% endif %}
+            {% if attempt.result %}
+              <p>Outcome: {{ attempt.result.outcome }}</p>
+              <ul>
+                {% for section in attempt.result.payload.sections %}
+                  {% if section.status != "ok" %}
+                    <li>{{ section.name }} — {{ section.status }}{% if section.issues %}: {{ section.issues.0.message }}{% endif %}</li>
+                  {% endif %}
+                  {% for issue in section.issues %}
+                    {% if section.status == "ok" %}
+                      <li>{{ section.name }} — {{ issue.code }}: {{ issue.message }}</li>
+                    {% endif %}
+                  {% endfor %}
+                {% endfor %}
+                {% for issue in attempt.result.payload.issues %}
+                  <li>{{ issue.code }}{% if issue.message %}: {{ issue.message }}{% endif %}</li>
+                {% endfor %}
+                {% for issue in attempt.result.payload.server_issues %}
+                  <li>{{ issue.section }} — {{ issue.code }}: {{ issue.message }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          {% endif %}
+        {% endwith %}
+      </section>
+    {% endif %}
+  </div>
 {% endblock %}
