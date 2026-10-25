@@ -222,7 +222,10 @@ laptop, reporting cold-load time separately, with stable operation on its 8 GB
 GPU hardware and no out-of-memory failures. Bound execution and degrade to
 manual review on failure. The exact model/runtime remains unselected until this
 benchmark passes. If no candidate meets the gates, keep advice disabled and
-allow the deterministic application to ship with manual review. Carry the
+return to Sourav with benchmark evidence for an explicit scope decision. The
+approved [completion plan](.scratch/initial-release/completion-plan.md) requires
+qualified local inference for completion unless Sourav explicitly changes that
+boundary; runtime fallback to manual review is still required. Carry the
 [bounded evaluation prerequisite](.scratch/initial-release-design/issues/11-local-interpretation-and-model-evaluation.md)
 into implementation tickets before enabling advice.
 

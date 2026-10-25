@@ -40,7 +40,7 @@ hardware investigation or unexpected defects finish in a fixed time.
 26. **[Measure and meet dashboard and search latency](issues/26-measure-and-meet-dashboard-and-search-latency.md)** — Blocked by: 06, 12, 13. On the actual mini-PC, representative dashboard and text-search interactions meet the agreed measurable latency gate. **Budget candidate.**
 27. **[Show validated optional advice without risking financial imports](issues/27-show-validated-optional-advice-without-risking-financial-imports.md)** — Blocked by: 14. An unresolved review item can show a source-linked structured local classification suggestion, or remain usable when advice fails. **Budget candidate.**
 28. **[Evaluate up to two local advice candidates before enablement](issues/28-evaluate-up-to-two-local-advice-candidates-before-enablement.md)** — Blocked by: 06, 27. A documented actual-laptop evaluation either selects a passing local candidate or records that advice stays disabled. **Stronger oversight.**
-29. **[Qualify the complete deterministic release on real hosts](issues/29-qualify-the-complete-deterministic-release-on-real-hosts.md)** — Blocked by: 10, 15, 16, 17, 19, 21, 22, 23, 25, 26. The integrated deterministic application passes source accuracy, private access, phone, failure and recovery gates on deployment hosts. **Stronger oversight.**
+29. **[Qualify the complete release on real hosts](issues/29-qualify-the-complete-deterministic-release-on-real-hosts.md)** — Blocked by: 10, 15, 16, 17, 19, 21, 22, 23, 25, 26, 27, 28. The integrated product passes financial, UI, qualified advisory inference and recovery gates. **Stronger oversight.**
 30. **[Record release evidence and a reviewable milestone handoff](issues/30-record-release-evidence-and-a-reviewable-milestone-handoff.md)** — Blocked by: 29. Sourav can review exactly which release requirements passed, what remains disabled and the verified operate/recover procedure. **Stronger oversight.**
 
 ## Milestones
@@ -51,7 +51,7 @@ hardware investigation or unexpected defects finish in a fixed time.
 | First real-host milestone | Isolated private upload/process/source verification | 06; deployment approval required |
 | Deterministic product | All four source families, included savings, reporting/search/review/matching and recovery/power behavior | Core tickets 07–23; follow dependencies |
 | Recovery and qualification | NAS backup/isolated restore, measured latency and real-host integrated acceptance | 24–26 and 29–30, together with all core dependencies |
-| Optional advice | Structured suggestions and bounded actual-laptop model evaluation | 27–28; not a blocker for manual-review release |
+| Local advisory inference | Structured suggestions and bounded actual-laptop model evaluation | 27–28; required by approved completion boundary unless Sourav explicitly changes scope |
 
 Milestones are checkpoints, not permission to push. Run real-host regression at
 meaningful later checkpoints using the procedure established in the first host
@@ -158,13 +158,13 @@ selection does not change the prohibition on cloud processing in the released ap
 | AC-23 | [22](issues/22-expose-operational-failures-without-logging-private-contents.md), [24](issues/24-create-consistent-backup-generations-with-visible-failure.md); final integrated verification in 29/30. |
 | AC-24 | [12](issues/12-show-dated-balances-and-gap-aware-period-history.md); final integrated verification in 29/30. |
 | AC-25 | [27](issues/27-show-validated-optional-advice-without-risking-financial-imports.md); final integrated verification in 29/30. |
-| AC-26 | [28](issues/28-evaluate-up-to-two-local-advice-candidates-before-enablement.md); conditional advice enablement only, disposition recorded in 30. |
+| AC-26 | [28](issues/28-evaluate-up-to-two-local-advice-candidates-before-enablement.md); required for inference enablement and current completion boundary; disposition recorded in 30. |
 | AC-27 | [26](issues/26-measure-and-meet-dashboard-and-search-latency.md); final integrated verification in 29/30. |
 
 Every acceptance criterion has a delivery owner and final evidence owner.
-For a deterministic/manual-review release, advice stays disabled and its advice-only
-behavior/quality gates are explicitly inactive rather than claimed passed; core
-manual review and successful imports without a model are still required. The
+The approved [completion plan](completion-plan.md) requires qualified local
+inference. If both candidates fail, keep advice disabled safely and request an
+explicit scope decision; deterministic-only completion is not automatic. The
 eight spec prerequisites are carried into relevant tickets (P-01 in 01; P-02 in
 01/02/04/10/14/19; P-03 in 03/05/07–10/15–17; P-04 in 06/24; P-05 in
 06/21; P-06 in 18/20/21/27; P-07 in 24/25; P-08 in 28); paths, deployment
@@ -178,11 +178,14 @@ Tickets 01-05 and 07-17 are done; ticket 06 remains deployment-gated. Ticket 18'
 local recovery behavior and tests pass, but target timing calibration under P-06
 remains open, so ticket 18 is not closed and tickets 19 and 22 remain blocked.
 
-Ticket 20 is in progress: the persisted Europe/London release cursor and
-21:00/catch-up/spring-DST behavior pass local tests. Its automatic trigger,
-no-wake-on-empty path, readiness/status deadline and restart-specific schedule
-proof remain open; P-06 does not specify the exact readiness probe contract.
-Ticket 21 remains blocked by 20. Continue other tickets whose declared
-dependencies are done without claiming real-host checks. Deployment,
-existing-data migrations, destructive operations and Git push remain subject to
+Ticket20 is locally complete. Ticket21 has local controller/lease implementation
+but still needs target lifecycle evidence. Sourav reports setup on both hosts;
+this does not close06 or other real-host acceptance gates.
+
+Sourav approved full-product completion including inference, a visual prototype
+checkpoint, and assistant-owned milestone execution. The current visual prototype
+is on `prototype/product-ui`; ticket23 records how to run it and verification
+limits. Await visual selection before production UI implementation. Independent
+eligible work remains available; no host gate should stall the entire backlog.
+Deployment, existing-data migrations, destructive actions and pushes retain
 their explicit approval gates.

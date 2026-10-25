@@ -35,6 +35,21 @@ Do not build a mobile app, redesign financial semantics or replace approved visu
 
 ## Completion evidence
 
-Not started. Record red/green commands, behavioral demo, review findings/fixes,
-local versus actual-host results, unresolved limits and commit reference when
-available. Passing local tests alone cannot close a required real-host gate.
+Production UI implementation remains incomplete. Sourav approved a visual
+prototype checkpoint before full UI implementation, including first-run account
+onboarding without routine Django-admin use.
+
+Visual exploration is isolated on branch `prototype/product-ui`, worktree
+`../beng-intellistore-ui-prototype`. Run `python3 scripts/ui_prototype.py`;
+open `http://127.0.0.1:8027/?variant=A` (also B/C). Synthetic-only existing-route
+previews avoid real authentication/data/mutations; no production routes changed.
+Compare persistent overview, monthly brief and transaction-first workbench.
+Onboarding, upload preview, review/confirmation, source dialog, search and failure
+states are interactive in memory; no real inference or backup is represented.
+
+Observed browser evidence: desktop screenshots of all three directions;390px
+overview/review/empty layouts without page overflow; onboarding→upload→review,
+confirmation/undo, advice-unavailable and worker-unavailable states, search/source
+dialog, keyboard variant switching and reload-stable URLs. No browser errors.
+This is visual-prototype evidence only, not actual-phone or production acceptance.
+Await Sourav's chosen visual direction; do not close ticket23.

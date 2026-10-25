@@ -3,7 +3,7 @@
 Status: ready-for-agent
 Release: R1
 Design baseline: decisions accepted through Q76
-Implementation status: tickets 01-05 and 07-17 done; ticket 18 has local recovery behavior implemented and verified, with P-06 target timing calibration pending; ticket 06 gates deployment only; continue other tickets whose dependencies are done.
+Implementation status: substantial local financial/import behavior exists; ticket20 is locally complete. Sourav reports both host setups completed. Product UI, qualified local inference, backups/restore and final host acceptance remain incomplete. The approved [completion plan](completion-plan.md) governs milestone execution and supersedes automatic deterministic-only release fallback.
 
 ## Problem Statement
 
@@ -292,8 +292,10 @@ August coverage.
 - Target 100 unresolved items in ten minutes of warm inference, recording cold
   load separately, with stable operation on the laptop's existing 8 GB GPU and
   no out-of-memory failures. These are acceptance targets, not observed results.
-- If neither candidate passes, keep advice disabled and allow the deterministic
-  release with manual review. No cloud fallback. Retain actual benchmark evidence.
+- If neither candidate passes, keep advice disabled for safety and bring the
+  benchmark evidence to Sourav for an explicit scope decision. Under the approved
+  completion plan, a deterministic-only application is not automatically a
+  completed release. No cloud fallback; retain actual benchmark evidence.
 
 ## Testing Decisions
 

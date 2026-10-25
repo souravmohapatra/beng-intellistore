@@ -17,7 +17,7 @@ A documented actual-laptop evaluation either selects a passing local candidate o
 - [ ] Independently label 50 held-out ambiguous/unresolved cases including legitimate unknowns; keep prompt-development cases separate.
 - [ ] Require at least 90% correct non-abstained suggestions and 50% coverage; report counts, per-class failures and rules-only baseline without hold-out tuning.
 - [ ] Measure separate warm 100-item workload within ten minutes, cold load and memory/OOM behavior on existing hardware.
-- [ ] Record exact artifacts/runtime/settings and disposition; a failed benchmark can complete this evaluation task with advice disabled, but cannot pass AC-26 or block deterministic release.
+- [ ] Record exact artifacts/runtime/settings and disposition. Failed candidates remain disabled and do not pass AC-26; return to Sourav for an explicit scope decision rather than declaring a deterministic-only project complete.
 
 ## Test interface and verification
 
