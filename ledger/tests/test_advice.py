@@ -105,6 +105,57 @@ class WorkerAdviceTests(TestCase):
         self.assertEqual(client.calls, 2)  # bounded, not repeated forever
         self.assertEqual(advices, {"lloyds_current": []})
 
+    def test_unexpected_adapter_exception_cannot_break_the_import(self):
+        from worker.advisory import collect_advice
+
+        class BrokenClient:
+            def suggest_classification(self, **kwargs):
+                raise TypeError("adapter bug")
+
+        advices = collect_advice(
+            FakeParsed(), BrokenClient(), max_attempts=2, retry_delay_seconds=0
+        )
+
+        self.assertEqual(advices, {"lloyds_current": []})
+
+    def test_process_advice_requests_reports_unexpected_adapter_errors(self):
+        from worker.client import process_advice_requests
+
+        class FakeWorker:
+            def __init__(self):
+                self.submitted = None
+                self.claims = 1
+
+            def claim_advice(self):
+                if self.claims == 0:
+                    return None
+                self.claims -= 1
+                return {
+                    "request": 9,
+                    "claim_token": "token-9",
+                    "transaction": {
+                        "description": "X",
+                        "amount_pence": -1,
+                        "account_kind": "current",
+                    },
+                }
+
+            def submit_advice(self, request_id, payload):
+                self.submitted = (request_id, payload)
+                return {"status": "failed"}
+
+        class BrokenInference:
+            def suggest_classification(self, **kwargs):
+                raise TypeError("adapter bug")
+
+        worker = FakeWorker()
+        results = list(process_advice_requests(worker, BrokenInference()))
+
+        self.assertEqual(results, [{"advice_request": 9, "status": "failed"}])
+        self.assertEqual(worker.submitted[0], 9)
+        self.assertEqual(worker.submitted[1]["outcome"], "failed")
+        self.assertEqual(worker.submitted[1]["failure"], "TypeError")
+
     def test_build_result_attaches_suggestions_to_their_section(self):
         parsed = FakeParsed()
         claim = {"result_version": 1, "attempt": 7}

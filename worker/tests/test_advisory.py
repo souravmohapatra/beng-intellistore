@@ -148,6 +148,22 @@ class LocalInferenceClientTests(SimpleTestCase):
             with self.assertRaisesRegex(AdvisoryFormatError, "failed validation"):
                 self.client.suggest_classification("SHOP", -100, "current")
 
+    def test_non_object_model_output_is_a_format_error(self):
+        for response_text in ("[]", "null", '"text"', "42"):
+            with self.subTest(response_text=response_text):
+                body = json.dumps({"response": response_text}).encode()
+                with self.mock_urlopen(body):
+                    with self.assertRaisesRegex(
+                        AdvisoryFormatError, "must be a JSON object"
+                    ):
+                        self.client.suggest_classification("SHOP", -100, "current")
+
+    def test_non_object_outer_response_is_a_format_error(self):
+        body = json.dumps([1, 2, 3]).encode()
+        with self.mock_urlopen(body):
+            with self.assertRaisesRegex(AdvisoryFormatError, "Malformed JSON"):
+                self.client.suggest_classification("SHOP", -100, "current")
+
     def test_http_error_status_is_unavailable(self):
         with self.mock_urlopen(b"{}", status=500):
             with self.assertRaisesRegex(AdvisoryUnavailableError, "HTTP error 500"):

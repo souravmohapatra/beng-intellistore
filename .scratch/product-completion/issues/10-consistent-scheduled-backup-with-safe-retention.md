@@ -69,7 +69,15 @@ Verification:
   Status file recorded success.
 - Concurrent imports/corrections continue during the read-only dump; local
   concurrency is additionally covered by task09's correction test.
-- `docker compose -f compose.production.yaml config` validates with required envs.
+- `docker compose -f compose.production.yaml config` validates with required envs
+  and does *not* require NAS/restore settings; recovery services live in
+  `compose.recovery.yaml` and are invoked explicitly.
+- Actual committed Compose invocation was exercised under a scratch project:
+  `docker compose -p recovery-smoke -f compose.production.yaml -f
+  compose.recovery.yaml run --rm backup` created a complete generation and wrote
+  `data/status/backup.json`; the matching `restore` service created and restored
+  `smoke_restore` with exit0. The script mount is
+  `${INTELLISTORE_COMPOSE_DIR}/scripts`, verified inside the service.
 
 Remaining user-run steps (see `docs/runbooks/backup-restore.md`): set the approved
 NAS path/status dir, confirm writable uid/headroom, install the timer, run one

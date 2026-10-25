@@ -276,8 +276,6 @@ def process_available(
 
 def process_advice_requests(client: WorkerClient, inference) -> Iterator[dict]:
     """Drain explicit advice requests independently of financial imports."""
-    from worker.advisory import AdvisoryClientError
-
     while True:
         claim = client.claim_advice()
         if claim is None:
@@ -290,7 +288,7 @@ def process_advice_requests(client: WorkerClient, inference) -> Iterator[dict]:
                 amount_pence=transaction["amount_pence"],
                 account_kind=transaction["account_kind"],
             )
-        except AdvisoryClientError as exc:
+        except Exception as exc:  # report, never crash the worker or import
             submitted = client.submit_advice(
                 claim["request"],
                 {

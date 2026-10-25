@@ -31,7 +31,7 @@ x-app-container: &app-container
     POSTGRES_HOST: postgres
     POSTGRES_PORT: "5432"
     INTELLISTORE_DATA_DIR: /data
-    BACKUP_STATUS_FILE: /status/backup.json
+    BACKUP_STATUS_FILE: /data/status/backup.json
     LAPTOP_CONTROLLER_URL: ${LAPTOP_CONTROLLER_URL:-}
     LAPTOP_CONTROLLER_TIMEOUT_SECONDS: ${LAPTOP_CONTROLLER_TIMEOUT_SECONDS:-5}
     WORKER_KEEP_AWAKE_SECONDS: ${WORKER_KEEP_AWAKE_SECONDS:-1200}
@@ -81,12 +81,6 @@ services:
         target: /data
         bind:
           create_host_path: false
-      - type: bind
-        source: ${INTELLISTORE_HOST_STATUS_DIR:?Set INTELLISTORE_HOST_STATUS_DIR to a local status directory}
-        target: /status
-        read_only: true
-        bind:
-          create_host_path: true
     healthcheck:
       test:
         - CMD
@@ -102,99 +96,3 @@ services:
     <<: *app-container
     command: ["release_due_jobs"]
     restart: "no"
-
-  # Consistent recovery generation. Systemd only invokes Compose; the logic runs
-  # in the container. The destination is a NAS mount on the mini-PC.
-  backup:
-    image: postgres:17.11-alpine
-    entrypoint: ["/bin/sh", "/scripts/backup_generation.sh"]
-    user: "${APP_UID:-1000}:${APP_GID:-1000}"
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:${INTELLISTORE_NO_NEW_PRIVILEGES:-true}
-    cap_drop:
-      - ALL
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PGHOST: postgres
-      PGUSER: intellistore
-      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the systemd environment file}
-      PGDATABASE: intellistore
-      BACKUP_DIR: /backup
-      ORIGINALS_DIR: /data/originals
-      STATUS_FILE: /status/backup.json
-      KEEP_GENERATIONS: ${INTELLISTORE_BACKUP_GENERATIONS:-7}
-    volumes:
-      - type: bind
-        source: ${INTELLISTORE_HOST_DATA_DIR:?Set INTELLISTORE_HOST_DATA_DIR to an existing local directory}
-        target: /data
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${INTELLISTORE_BACKUP_DIR:?Set INTELLISTORE_BACKUP_DIR to the NAS backup directory}
-        target: /backup
-        bind:
-          create_host_path: true
-      - type: bind
-        source: ${INTELLISTORE_HOST_STATUS_DIR:?Set INTELLISTORE_HOST_STATUS_DIR to a local status directory}
-        target: /status
-        bind:
-          create_host_path: true
-      - type: bind
-        source: ${INTELLISTORE_COMPOSE_DIR:?Set INTELLISTORE_COMPOSE_DIR}
-        target: /scripts
-        read_only: true
-    restart: "no"
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "2"
-
-  # Isolated restore target. Never point these paths at live data.
-  restore:
-    image: postgres:17.11-alpine
-    entrypoint: ["/bin/sh", "/scripts/restore_generation.sh"]
-    user: "${APP_UID:-1000}:${APP_GID:-1000}"
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:${INTELLISTORE_NO_NEW_PRIVILEGES:-true}
-    cap_drop:
-      - ALL
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PGHOST: postgres
-      PGUSER: intellistore
-      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the systemd environment file}
-      LIVE_DATABASE: intellistore
-    volumes:
-      - type: bind
-        source: ${INTELLISTORE_BACKUP_DIR:?Set INTELLISTORE_BACKUP_DIR to the NAS backup directory}
-        target: /backup
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${INTELLISTORE_RESTORE_DIR:?Set INTELLISTORE_RESTORE_DIR to an isolated restore directory}
-        target: /restore
-        bind:
-          create_host_path: true
-      - type: bind
-        source: ${INTELLISTORE_COMPOSE_DIR:?Set INTELLISTORE_COMPOSE_DIR}
-        target: /scripts
-        read_only: true
-    restart: "no"
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "2"

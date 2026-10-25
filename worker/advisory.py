@@ -146,10 +146,15 @@ class LocalInferenceClient:
 
         try:
             outer = json.loads(raw_body)
+            if not isinstance(outer, dict):
+                raise ValueError("outer response must be an object")
             response_text = outer.get("response", "")
             parsed = json.loads(response_text)
         except Exception as err:
             raise AdvisoryFormatError(f"Malformed JSON returned by model: {err}") from err
+
+        if not isinstance(parsed, dict):
+            raise AdvisoryFormatError("Model output must be a JSON object")
 
         parsed["version"] = ADVISORY_SCHEMA_VERSION
         parsed["model"] = self.model
@@ -157,7 +162,7 @@ class LocalInferenceClient:
 
         try:
             return AdvisorySuggestion.from_dict(parsed)
-        except ValueError as err:
+        except (ValueError, TypeError) as err:
             raise AdvisoryFormatError(f"Model output failed validation: {err}") from err
 
 
@@ -225,7 +230,7 @@ def _advise_with_retry(client, row, account_kind, max_attempts, retry_delay_seco
                 amount_pence=row.amount_pence,
                 account_kind=account_kind,
             )
-        except AdvisoryClientError as err:
+        except Exception as err:  # optional advice must never break the import
             last_error = err
             if attempt + 1 < max_attempts and retry_delay_seconds:
                 import time

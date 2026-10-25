@@ -9,7 +9,6 @@ Set these in `/etc/beng-intellistore/runtime.env` (root-owned, outside the check
 
 ```
 INTELLISTORE_BACKUP_DIR=/mnt/nas/<approved-project-path>/intellistore
-INTELLISTORE_HOST_STATUS_DIR=/var/lib/beng-intellistore/status
 INTELLISTORE_RESTORE_DIR=/var/lib/beng-intellistore/restore-check
 INTELLISTORE_BACKUP_GENERATIONS=7
 ```
@@ -17,8 +16,9 @@ INTELLISTORE_BACKUP_GENERATIONS=7
 - The NAS directory must be writable by the container user (default uid/gid
   1000). Create it beforehand and check with `touch` as that user; the container
   does not run privileged.
-- The status directory is a local mini-PC path; the app reads
-  `/status/backup.json` read-only. Create it before starting the app.
+- Status is written to `${INTELLISTORE_HOST_DATA_DIR}/status/backup.json`, inside
+  the existing local data directory. The app reads it; no extra mount or path is
+  needed. The backup container creates the `status` subdirectory.
 - Headroom: seven generations roughly equal seven copies of the database dump plus
   seven copies of the originals (originals also remain on local storage). Confirm
   free space with `df -h` before the first run.
@@ -43,7 +43,7 @@ after the host returns.
 sudo systemctl start intellistore-backup.service
 sudo journalctl -u intellistore-backup.service -n 40 --no-pager
 ls -1 "$INTELLISTORE_BACKUP_DIR"
-cat "$INTELLISTORE_HOST_STATUS_DIR/backup.json"
+cat "$INTELLISTORE_HOST_DATA_DIR/status/backup.json"
 ```
 
 Only a directory containing `COMPLETE` counts. Incomplete runs remain as
@@ -61,6 +61,7 @@ sudo systemctl stop intellistore-app.service   # optional; prevents live writes
 sudo docker compose --env-file /dev/null \
   --project-directory "$INTELLISTORE_COMPOSE_DIR" \
   -f "$INTELLISTORE_COMPOSE_DIR/compose.production.yaml" \
+  -f "$INTELLISTORE_COMPOSE_DIR/compose.recovery.yaml" \
   run --rm restore \
   --generation /backup/generation-<timestamp> \
   --database intellistore_restore_check \
@@ -85,7 +86,7 @@ service:
 
 ```bash
 sudo systemctl start intellistore-backup.service
-cat "$INTELLISTORE_HOST_STATUS_DIR/backup.json"   # failed + message
+cat "$INTELLISTORE_HOST_DATA_DIR/status/backup.json"   # failed + message
 ```
 
 Expect: non-zero service result, visible failure, no local data deleted, no good
