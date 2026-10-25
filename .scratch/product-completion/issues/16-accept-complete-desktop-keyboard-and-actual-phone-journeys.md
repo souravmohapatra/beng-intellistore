@@ -46,7 +46,7 @@ Local evidence (isolated app, real data):
   offset; tables render as labelled stacked rows (grid with `data-label` content).
 - Earlier journeys in tasks01–04 exercised sign-in, account creation, upload,
   rejection, original access, corrections, advice request and status rendering.
-- Automated suite:291 tests, including the concurrency and advice-fence cases.
+- Automated suite:296 tests, including the concurrency and advice-fence cases.
 
 Remaining user-run steps: exercise the same journeys on an actual phone over the
 LAN, confirm qualified advice (task08) and failure/unavailable states in the

@@ -24,8 +24,8 @@ Follow `docs/runbooks/inference-runtime.md`:
 
 Follow `docs/runbooks/backup-restore.md`:
 
-1. Set `INTELLISTORE_BACKUP_DIR`, `INTELLISTORE_HOST_STATUS_DIR`,
-   `INTELLISTORE_RESTORE_DIR`; confirm writable uid and headroom.
+1. Set `INTELLISTORE_BACKUP_DIR` and `INTELLISTORE_RESTORE_DIR`; confirm writable
+   uid and headroom. Status is written inside `INTELLISTORE_HOST_DATA_DIR/status`.
 2. Install `intellistore-backup.service`/`.timer`; run one controlled generation.
 3. Confirm the Status page shows success and seven-generation retention.
 4. Make the destination unavailable once; confirm failure visibility, no local
@@ -75,7 +75,7 @@ load, dataset/browser/network/runtime. Never seed the live database.
 
 ## Local verification snapshot
 
-- `env POSTGRES_PORT=55487 .venv/bin/python manage.py test -v 0`:291 tests.
+- `env POSTGRES_PORT=55487 .venv/bin/python manage.py test -v 0`:296 tests.
 - Real isolated backup during concurrent writes; isolated restore verified through
   the application.
 - No live host, private originals or push touched. Local changes are committed
