@@ -1,5 +1,7 @@
 # 02: Preserve an upload and reopen its original
 
+> Historical completed work; not an active task. Preserve evidence below. Use the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: done
 Claimed by: —
 Blocked by: 01

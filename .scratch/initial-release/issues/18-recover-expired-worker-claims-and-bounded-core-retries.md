@@ -1,7 +1,9 @@
 # 18: Recover expired worker claims and bounded core retries
 
+> Superseded execution task; not closed as complete. Status below is historical. Remaining work is owned by the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: ready-for-agent
-Claimed by: Codex
+Claimed by: — (historical claim released at backlog cutover)
 Approval: ticket breakdown approved by Sourav
 Blocked by: 04
 Parent: [First-release specification](../spec.md)

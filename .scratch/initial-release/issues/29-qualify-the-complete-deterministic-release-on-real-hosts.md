@@ -1,5 +1,7 @@
 # 29: Qualify the complete release on real hosts
 
+> Superseded execution task; not closed as complete. Status below is historical. Remaining work is owned by the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: ready-for-agent
 Approval: ticket breakdown approved by Sourav
 Blocked by: 10, 15, 16, 17, 19, 21, 22, 23, 25, 26, 27, 28

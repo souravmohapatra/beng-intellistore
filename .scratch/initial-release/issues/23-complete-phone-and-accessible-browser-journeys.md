@@ -1,6 +1,9 @@
 # 23: Complete phone and accessible browser journeys
 
+> Superseded execution task; not closed as complete. Status below is historical. Remaining work is owned by the [authoritative backlog](../../product-completion/ticket-plan.md). UI work is paused and unaccepted.
+
 Status: ready-for-agent
+Claimed by: — (historical claim released at backlog cutover)
 Approval: ticket breakdown approved by Sourav
 Blocked by: 12, 13, 14
 Parent: [First-release specification](../spec.md)
@@ -17,6 +20,7 @@ Core dashboard, upload, search and one-at-a-time review work on narrow screens a
 - [ ] Verify keyboard focus, labels, errors, status readability and usable controls for the core journeys.
 - [ ] Respect the approved rendered UI/Chart.js stack and retain source/provisional/coverage distinctions while shaping visual design.
 - [ ] Record automated desktop/narrow-viewport evidence and an actual phone smoke result; simulation alone is not phone verification.
+- [ ] First-time users can create a named account in the application and continue to upload without Django admin; invalid/duplicate submissions preserve existing accounts.
 
 ## Test interface and verification
 
@@ -52,4 +56,6 @@ overview/review/empty layouts without page overflow; onboarding→upload→revie
 confirmation/undo, advice-unavailable and worker-unavailable states, search/source
 dialog, keyboard variant switching and reload-stable URLs. No browser errors.
 This is visual-prototype evidence only, not actual-phone or production acceptance.
-Await Sourav's chosen visual direction; do not close ticket23.
+Sourav approved A's overview layout and the side-by-side source/decision Review
+layout. Production implementation is now in progress against real Django data;
+prototype values and simulated inference/backup states must not enter production.

@@ -3,6 +3,19 @@
 Specs, implementation tickets, and design decision maps live in `.scratch/`.
 These are version-controlled project artifacts, unlike local `.agent/` memory.
 
+## Active implementation authority
+
+Before selecting, claiming, creating or closing implementation work, read
+`.scratch/product-completion/ticket-plan.md` and its linked `spec.md`.
+Only that directory's seventeen tickets form the active implementation backlog.
+`.scratch/initial-release/` plans and implementation tickets are historical
+evidence; their old readiness/claims/continuation instructions are not actionable.
+The original specification, HLD, glossary and accepted design decisions remain
+requirements sources as described by the active specification.
+Sourav has explicitly authorized implementation from this backlog. Follow the
+active index's authorization record and unresolved gates; readiness alone does
+not resolve prerequisites or authorize deployment/live-data/power/push actions.
+
 ## Implementation work
 
 - One feature or milestone per `.scratch/<feature-slug>/` directory.

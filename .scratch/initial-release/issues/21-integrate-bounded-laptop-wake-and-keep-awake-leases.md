@@ -1,7 +1,9 @@
 # 21: Integrate bounded laptop wake and keep-awake leases
 
+> Superseded execution task; not closed as complete. Status below is historical. Remaining work is owned by the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: ready-for-agent
-Claimed by: omp
+Claimed by: — (historical claim released at backlog cutover)
 Approval: ticket breakdown approved by Sourav; private controller reuse approved 2026-10-22
 Blocked by: P-06 target timing calibration and live integration approval (local implementation complete)
 Parent: [First-release specification](../spec.md)

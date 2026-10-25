@@ -1,6 +1,6 @@
 # Product completion plan
 
-Status: direction approved by Sourav (“Yes to all”): complete product including qualified inference; visual prototype before full UI implementation; assistant-owned milestone execution. Live deployment, data migrations, destructive operations and pushes retain explicit approval gates.
+Authority: RETIRED — historical audit and approved task proposal. The [product-completion backlog](../product-completion/ticket-plan.md) is now the sole active implementation direction; its [specification](../product-completion/spec.md) owns current gates. Text below records the proposal at approval time, not a second queue. Implementation remains paused.
 Owner: coding assistant as project manager and technical lead; Sourav owns product acceptance and consequential trade-offs.
 Baseline: setup commit `079e96d`, existing [spec](spec.md), [ticket plan](ticket-plan.md), HLD and ADRs. This plan reconciles delivery; it does not replace accepted financial semantics or silently close tickets.
 
@@ -123,7 +123,7 @@ Tickets06/26/29/30, plus inference disposition27/28under the agreed completion b
 - **Assistant, tech lead:** stable contracts, implementation design, deterministic-money invariants, TDD at approved interfaces, integration and independent review. Inspect available host/repo facts before requesting information.
 - **Sourav:** completion-policy/visual choices, private oracle or independent-label judgement where required, actual-phone acceptance, live mutation/fault-test permissions and final product acceptance.
 - Every milestone report: user-visible result; what was actually exercised locally/on host; unresolved risks; next ready work. Demonstrate the product, not just a test-count increase.
-- Implementation may progress autonomously within the approved plan. Preserve existing explicit approval for deployment, live data migrations, destructive operations and push; group planned host acceptance into bounded requests rather than repeated ad-hoc permission prompts.
+- Planning approval, task publication and visual approval do not authorize implementation. Begin only after Sourav explicitly authorizes implementation and its scope. Deployment, live data migrations, destructive operations and push remain separate approval gates.
 - No artificial timeline estimates before runtime/model and host evidence establish the work. Sequence and exit criteria are the commitment.
 
 ## 7. Approved alignment and next checkpoint
@@ -134,4 +134,196 @@ Sourav accepted all three recommendations:
 2. Present a runnable onboarding/dashboard/review visual prototype with populated, empty, uncertain and failure states before implementing the complete UI.
 3. The assistant owns backlog execution, integration and milestone demonstrations. Live mutations and fault tests still require bounded explicit approval.
 
-Next checkpoint: compare three structurally different visual directions on a synthetic-only, isolated prototype. Record the chosen direction before production UI work. The prototype is not an installed feature or evidence of functioning inference/backup.
+Visual choice: A's overview shell with side-by-side source/decision review. The assistant began real UI work prematurely; Sourav instructed it to stop and preserve that work. It is an unaccepted work-in-progress input to the tasks below, not a completed milestone. Next checkpoint: approve task granularity and dependencies, then publish individual tickets. Do not execute them without separate authorization.
+
+## 8. Proposed implementation tasks — awaiting planning approval
+
+These are draft task IDs, not newly published tickets or ready-to-execute claims.
+They refine existing tickets rather than replacing completed work or duplicating
+the backlog. On approval, publish each agreed slice separately, retaining links
+to the existing acceptance criteria and historical evidence. No parent ticket is
+closed by this proposal. “None” below means no remaining technical dependency,
+not permission to implement.
+
+All tasks include applicable public-interface behavioral tests, integration,
+standards/spec review and an observable demonstration. Local evidence and
+actual-host acceptance are recorded separately. Existing partial implementation
+must be reviewed and reused where sound, not automatically accepted or rebuilt.
+
+### T01 — First-use account and upload journey
+Existing scope: 01/02/03/23. Blocked by: None.
+- Sign in, create a named account, upload its first supported statement and reopen
+  the preserved original without Django admin; validation and rejection are clear.
+- Duplicate/invalid account submissions cannot corrupt existing accounts; last
+  account selection and consolidated savings mapping remain usable.
+- Audit and finish the preserved onboarding/UI work; demonstrate empty and
+  successful journeys against real local PostgreSQL and isolated files.
+- Excludes account deletion/type changes; any broader account-management need
+  requires explicit scope agreement.
+
+### T02 — Evidence-first dashboard and transaction navigation
+Existing scope: 12/13/23. Blocked by: None.
+- Approved A layout, real period-selected metrics, dated balances/history,
+  provisional/disputed/unknown states and honest coverage gaps.
+- Metric and original-description search lead to supporting transactions and
+  originals; period context and pagination survive navigation.
+- Demonstrate populated and empty states on desktop and narrow viewports.
+  Reuse existing financial semantics and SVG evidence chart; no chart-library
+  migration unless a concrete requirement justifies it.
+
+### T03 — Source-first review and reversible decisions
+Existing scope: 14/15/16/17/23. Blocked by: None.
+- Side-by-side source and decision on desktop; source accessible before actions
+  on narrow screens. Reach review from transaction/search/metric journeys.
+- Confirm/revert classification, inspect history, resolve duplicate/transfer/
+  repayment/reversal candidates without rewriting source facts.
+- Demonstrate changed reporting effect and restored effect after revert, plus
+  rejected invalid decisions and preserved history.
+
+### T04 — Understand and recover an upload's processing state
+Existing scope: 18/20/23. Blocked by: None.
+- Receipt distinguishes preserved, queued, processing, imported, partial,
+  unsupported and failed states; shows actionable next steps and original access.
+- Process now and bounded retry reach real worker outcomes; worker unavailable
+  does not prevent ordinary browsing or accepted-original access.
+- Exercise real local worker/API round trips and failure states; actual wake and
+  target timing qualification belong to T10.
+
+### T05 — Isolated laptop inference runtime and worker connectivity
+Existing scope: 27/28 and runtime prerequisite. Blocked by: None.
+- Implement the agreed project runtime deployment, pinned model/runtime and
+  worker-container connectivity; demonstrate a real local structured response.
+- No production suggestions enabled, no cloud fallback, no interference with
+  existing Ollama consumers; record cold load and memory observations.
+- Before implementation: resolve Docker runtime versus explicitly approved
+  native-service reuse, candidate/license suitability and resource limits.
+  Any installation/download/service changes require bounded host approval.
+
+### T06 — One validated suggestion through explicit user confirmation
+Existing scope: 27. Blocked by: T05.
+- Unresolved transaction → bounded local inference → validated source-linked
+  classification or abstention → review → explicit confirmation or dismissal.
+- Preserve model/prompt version and provenance; suggestions cannot rewrite
+  amounts, dates, balances or override confirmed corrections.
+- Demonstrate the whole path in isolation. T08 gates normal-use enablement,
+  not controlled evaluation; this avoids a qualification/implementation cycle.
+- Integrate with T03 through the existing review interface; shared ownership
+  must be coordinated, but visual polish is not a technical blocker.
+
+### T07 — Advisory failure and separate bounded recovery
+Existing scope: 27. Blocked by: T06.
+- Timeout, missing runtime, malformed output or unsupported source evidence
+  leaves deterministic imports and manual review usable.
+- Advice retry is bounded and independent of financial reimport; obsolete
+  suggestions cannot replace confirmed corrections.
+- Show failure, retry and abstention honestly without private content in logs.
+
+### T08 — Qualify the model and gate enablement
+Existing scope: 28. Blocked by: T05, T06, T07.
+- Establish independent development/held-out labels before tuning; evaluate at
+  most two candidates and compare with the rules-only baseline.
+- At least 50 held-out cases; at least 90% correctness among non-abstained
+  suggestions and at least 50% coverage; report per-class failures.
+- Actual laptop: 100 warm unresolved items within 10 minutes, cold load
+  separately, memory recorded and no OOM; enable only a pinned passing candidate.
+- Both fail → keep advice disabled and return to Sourav for an explicit decision.
+  This is not permission to declare deterministic-only completion.
+
+### T09 — Preserve financial results and corrections across interruptions
+Existing scope: local portion of 18 plus 19. Blocked by: None.
+- Verify/fill gaps in bounded lease recovery, lost-ack replay, conflicting
+  payloads, stale attempts, concurrent corrections and changed-identity reprocessing.
+- Interrupted or repeated work cannot duplicate financial effects or replace
+  newer results/user corrections; source/history remains available.
+- Use real PostgreSQL/files and approved controlled interfaces. Propose removing
+  host-calibration as a blocker of local 19 work; retain it as mandatory T10
+  acceptance. This dependency adjustment needs planning approval.
+
+### T10 — Qualify real-host scheduling, wake and keep-awake lifecycle
+Existing scope: 06/18/20/21. Blocked by: T09; T08 for final combined parser/inference timing.
+- Verify LAN deployment baseline, nightly scheduling/restart catch-up, Process
+  now, no wake for empty work and real worker-readiness transitions.
+- Demonstrate wake → claim → bounded owned lease → result → release, expiry,
+  failures and suspend/resume without touching unrelated leases/services.
+- Calibrate timings against qualified workloads. Parser/controller checks can
+  start earlier; final combined acceptance waits for T08.
+- Requires approved host deployment, power/fault scenarios and safe timing window.
+
+### T11 — Actionable operational status without private logging
+Existing scope: 22. Blocked by: T04, T07, T09, T12.
+- Surface processing/advice/backup last success and unresolved failure with next
+  action, distinguishing running services from functional readiness.
+- Normal use remains independent of laptop/NAS availability; diagnostics contain
+  neither original financial contents nor credentials.
+- Each producer task exposes its own honest status; this task integrates those
+  statuses, not a generic telemetry platform.
+
+### T12 — Consistent scheduled backup with safe retention
+Existing scope: 24. Blocked by: None.
+- Consistent database + originals + corrections recovery generation while
+  imports/edits continue; define the committed-state boundary before coding.
+- Run at 03:00 Europe/London; keep seven successful generations; retire an old
+  generation only after a new complete success.
+- Interrupted/full/unavailable NAS and schedule/DST/catch-up failures are visible;
+  no local deletion and no disruption of normal application use.
+- Prove locally, then on approved NAS destination. Resolve path/headroom,
+  consistency protocol and target permissions before the relevant implementation.
+
+### T13 — Restore and verify a recovery generation in isolation
+Existing scope: 25. Blocked by: T12.
+- Restore into a separate database/storage target; verify original bytes,
+  evidence navigation, reports, mappings and confirmed corrections.
+- Reject incomplete/unusable generations and report measured recovery steps
+  and recovery-window limits; never overwrite the live database for a test.
+- Requires approval for actual NAS/host restore exercise and isolated capacity.
+
+### T14 — Verify actual supplied statement families end to end
+Existing scope: 06/07–10/15–17/29. Blocked by: T09.
+- Compare Lloyds Current/Credit, Amex and included Revolut GBP/savings against
+  independently established expected results, using private files outside Git.
+- Include overlap, repayments, transfers, cash/refunds, excluded sections,
+  missing savings coverage, mismatch and partial-section outcomes.
+- Existing parsers are not rebuilt. Record exact supported-format limits and
+  fix proven discrepancies only within approved implementation scope.
+
+### T15 — Measure and meet real-host dashboard/search latency
+Existing scope: 26. Blocked by: T02.
+- On an approved isolated mini-PC deployment, use 100,000 synthetic transactions
+  spanning up to ten years; at least 30 warm repetitions per representative
+  dashboard/period/search journey, p95 at most two seconds.
+- Report cold first load, dataset/query/browser/network/runtime conditions;
+  optimize and repeat only where needed. Never seed benchmark data into live DB.
+- Requires an actual-host deployment baseline and resource approval; does not
+  wait for unrelated wake/backup work.
+
+### T16 — Accept complete desktop, keyboard and actual-phone journeys
+Existing scope: 23/29. Blocked by: T01, T02, T03, T04, T07, T08, T11.
+- Exercise onboarding, upload, dashboard, search, original access, corrections,
+  qualified advice and failure/status journeys in the integrated application.
+- Check labels, focus, errors, control targets and narrow layouts; include an
+  actual phone, not only browser viewport emulation.
+- Requires approved deployment and Sourav's actual-device acceptance; earlier
+  local browser checks remain evidence, not a substitute.
+
+### T17 — Integrated release qualification and operating handoff
+Existing scope: 29/30. Blocked by: T10, T13, T14, T15, T16.
+- Map every applicable AC-01–27 to observed local and real-host evidence;
+  no unrun/failed criterion silently disappears.
+- Verify ordinary use without laptop/NAS, approved update/restart/rollback,
+  runtime configuration, privacy and recovery procedure.
+- Deliver reviewable release evidence and operating instructions for Sourav's
+  acceptance. Final release/deployment and push still require explicit approval.
+
+## 9. Planning decisions before task publication
+
+1. Approve or revise these end-to-end slices and genuine blocking edges.
+2. Approve splitting local recovery implementation from real-host calibration,
+   without removing either acceptance requirement.
+3. Confirm that first-use account management means create/list/select only;
+   rename/type-change/delete are not silently included.
+4. Resolve runtime reuse/deployment, inference contract/labels and backup
+   consistency/target decisions in focused planning follow-ups using repo/host
+   evidence first. Unresolved decisions remain explicit gates, not agent guesses.
+5. Publish approved individual task files linked to existing tickets. This
+   completes task planning only; implementation remains paused until explicitly
+   authorized by Sourav.

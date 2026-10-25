@@ -1,9 +1,9 @@
 # First release: personal statement import and financial dashboard
 
-Status: ready-for-agent
+Authority: retained requirements and acceptance baseline, not an execution queue.
 Release: R1
 Design baseline: decisions accepted through Q76
-Implementation status: substantial local financial/import behavior exists; ticket20 is locally complete. Sourav reports both host setups completed. Product UI, qualified local inference, backups/restore and final host acceptance remain incomplete. The approved [completion plan](completion-plan.md) governs milestone execution and supersedes automatic deterministic-only release fallback.
+Implementation direction: the [product-completion backlog](../product-completion/ticket-plan.md) and its [completion specification](../product-completion/spec.md) exclusively govern remaining work, authorization and release gates. Earlier plans/tickets are historical evidence. Qualified local inference remains required unless Sourav explicitly revises scope. Implementation is paused pending explicit authorization.
 
 ## Problem Statement
 

@@ -1,5 +1,7 @@
 # 03: Explain intake rejection and account mismatches
 
+> Historical completed work; not an active task. Preserve evidence below. Use the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: done
 Claimed by: —
 Approval: ticket breakdown approved by Sourav

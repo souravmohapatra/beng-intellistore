@@ -1,7 +1,11 @@
 # First-release implementation tickets
 
-Status: ready-for-agent
-Publication: 30 individual tickets published following Sourav’s approval.
+Authority: RETIRED — historical execution plan and evidence index.
+Superseded by: [Product-completion authoritative backlog](../product-completion/ticket-plan.md).
+The thirty tickets below are not an active queue. Historical statuses, approvals,
+dependencies and continuation instructions do not authorize execution. Completed
+work remains complete; unverified work is carried into the new backlog.
+Implementation remains paused until Sourav explicitly authorizes it.
 
 [Release specification](spec.md) remains the accepted scope; these tickets do not
 modify it or start implementation. Each ticket includes the tests and integration

@@ -1,5 +1,7 @@
 # 15: Resolve overlapping imports conservatively
 
+> Historical completed work; not an active task. Preserve evidence below. Use the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: done
 Approval: ticket breakdown approved by Sourav
 Blocked by: 14

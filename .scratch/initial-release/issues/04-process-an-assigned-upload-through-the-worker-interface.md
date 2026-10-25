@@ -1,5 +1,7 @@
 # 04: Process an assigned upload through the worker interface
 
+> Historical completed work; not an active task. Preserve evidence below. Use the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: done
 Claimed by: —
 Approval: ticket breakdown approved by Sourav

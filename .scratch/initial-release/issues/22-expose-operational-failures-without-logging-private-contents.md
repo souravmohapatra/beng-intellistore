@@ -1,5 +1,7 @@
 # 22: Expose operational failures without logging private contents
 
+> Superseded execution task; not closed as complete. Status below is historical. Remaining work is owned by the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: ready-for-agent
 Approval: ticket breakdown approved by Sourav
 Blocked by: 18, 20

@@ -1,5 +1,7 @@
 # 01: Open a private local account overview
 
+> Historical completed work; not an active task. Preserve evidence below. Use the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: done
 Claimed by: —
 Blocked by: None

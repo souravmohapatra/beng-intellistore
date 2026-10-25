@@ -1,5 +1,7 @@
 # 05: Import Lloyds Current into a source-linked transaction view
 
+> Historical completed work; not an active task. Preserve evidence below. Use the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: done
 Claimed by: —
 Approval: ticket breakdown approved by Sourav

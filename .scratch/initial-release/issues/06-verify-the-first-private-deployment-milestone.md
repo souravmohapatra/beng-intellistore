@@ -1,5 +1,7 @@
 # 06: Verify the first private deployment milestone
 
+> Superseded execution task; not closed as complete. Status below is historical. Remaining work is owned by the [authoritative backlog](../../product-completion/ticket-plan.md).
+
 Status: needs-info
 Approval: ticket breakdown approved by Sourav
 Blocked by: 05

@@ -3,6 +3,11 @@
 Label: wayfinder:map
 Status: resolved
 
+Authority: historical resolved design rationale, not an active implementation
+queue. Its decisions remain requirement inputs; its old next-action/status text
+is historical. Use the [authoritative product-completion backlog](../product-completion/ticket-plan.md)
+for remaining work. Implementation remains paused pending explicit authorization.
+
 ## Destination
 
 A build-ready first-release design for the statement-import and financial
