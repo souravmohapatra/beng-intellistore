@@ -18,7 +18,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 from intake.accept import accept_upload
 from intake.inspect import FileTooLarge, IntakeRejected
 from intake.storage import StorageUnavailable
-from jobs.models import Job, ProcessingSchedule
+from jobs.models import AdviceRequest, Job, ProcessingSchedule
 from jobs.scheduling import refresh_worker_readiness
 from ledger.forms import AccountForm, UploadForm
 from ledger.models import (
@@ -263,6 +263,52 @@ class ReviewDetailView(LoginRequiredMixin, View):
             Transaction.objects.select_related("account", "upload"), pk=pk
         )
         action = request.POST.get("action")
+        if action == "request_advice":
+            if classify_source(transaction) is not None:
+                return self._render(
+                    request,
+                    pk,
+                    error="Deterministic evidence already resolves this row.",
+                    status=400,
+                )
+            if transaction.suggestions.filter(
+                accepted_at__isnull=True, dismissed_at__isnull=True
+            ).exists():
+                return self._render(
+                    request,
+                    pk,
+                    error="An advice suggestion is already waiting for a decision.",
+                    status=400,
+                )
+            with transaction_db.atomic():
+                advice_request = (
+                    AdviceRequest.objects.select_for_update()
+                    .filter(transaction=transaction)
+                    .first()
+                )
+                now = timezone.now()
+                if advice_request is None:
+                    AdviceRequest.objects.create(transaction=transaction)
+                elif advice_request.status in {
+                    AdviceRequest.Status.PENDING,
+                    AdviceRequest.Status.PROCESSING,
+                }:
+                    pass
+                else:
+                    advice_request.status = AdviceRequest.Status.PENDING
+                    advice_request.attempts_used = 0
+                    advice_request.last_failure = ""
+                    advice_request.claimed_at = None
+                    advice_request.save(
+                        update_fields=[
+                            "status",
+                            "attempts_used",
+                            "last_failure",
+                            "claimed_at",
+                            "updated_at",
+                        ]
+                    )
+            return redirect("ledger:review_detail", pk=pk)
         if action == "dismiss_advice":
             suggestion = get_object_or_404(
                 ClassificationSuggestion,
@@ -500,12 +546,16 @@ class ReviewDetailView(LoginRequiredMixin, View):
             pk=pk,
         )
         active = active_correction(transaction)
+        machine_effect = classify_source(transaction)
         suggestion = (
             transaction.suggestions.filter(
                 accepted_at__isnull=True, dismissed_at__isnull=True
             )
             .order_by("-pk")
             .first()
+        )
+        advice_request = (
+            AdviceRequest.objects.filter(transaction=transaction).first()
         )
         options = [
             {
@@ -544,7 +594,9 @@ class ReviewDetailView(LoginRequiredMixin, View):
                 "corrections": transaction.corrections.all(),
                 "active_correction": active,
                 "suggestion": suggestion,
-                "machine_effect": _describe_effect(classify_source(transaction)),
+                "advice_request": advice_request,
+                "machine_unresolved": machine_effect is None,
+                "machine_effect": _describe_effect(machine_effect),
                 "options": options,
                 "correction_error": error,
             },

@@ -25,15 +25,16 @@ from jobs.keep_awake import (
     renew_keep_awake,
 )
 from jobs.models import (
+    AdviceRequest,
     Job,
     JobAttempt,
     JobEvent,
     JobResult,
     WorkerCredential,
 )
-from jobs.publication import apply_result, validate_result_payload
+from jobs.publication import advisory_fields, apply_result, validate_result_payload
 from jobs.scheduling import mark_worker_ready, refresh_worker_readiness
-from ledger.models import Upload
+from ledger.models import ClassificationSuggestion, Upload
 
 MAX_BODY_BYTES = 1024 * 1024
 CLAIM_LOCK_KEY = 0x1A2B3C
@@ -386,3 +387,142 @@ def result(request, job_id):
             )
         )
     return JsonResponse(response_body)
+
+
+ADVICE_CLAIM_LOCK_KEY = 0x1A2B3D
+
+
+@csrf_exempt
+@require_POST
+@worker_required
+def claim_advice(request):
+    """Claim one pending or stale advice request, independent of imports."""
+    with transaction.atomic():
+        if connection.vendor == "postgresql":
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_advisory_xact_lock(%s)", [ADVICE_CLAIM_LOCK_KEY])
+        now = timezone.now()
+        stale_before = now - timedelta(seconds=settings.WORKER_LEASE_SECONDS)
+        if AdviceRequest.objects.select_for_update().filter(
+            status=AdviceRequest.Status.PROCESSING, claimed_at__gte=stale_before
+        ).exists():
+            return HttpResponse(status=204)
+        advice_request = (
+            AdviceRequest.objects.select_for_update()
+            .select_related("transaction__account")
+            .filter(
+                Q(status=AdviceRequest.Status.PENDING)
+                | Q(
+                    status=AdviceRequest.Status.PROCESSING,
+                    claimed_at__lt=stale_before,
+                )
+            )
+            .order_by("created_at", "pk")
+            .first()
+        )
+        if advice_request is None:
+            return HttpResponse(status=204)
+        if advice_request.attempts_used >= settings.WORKER_MAX_ATTEMPTS:
+            advice_request.status = AdviceRequest.Status.FAILED
+            advice_request.last_failure = "Advice attempt budget exhausted."
+            advice_request.claimed_at = None
+            advice_request.save(
+                update_fields=["status", "last_failure", "claimed_at", "updated_at"]
+            )
+            return HttpResponse(status=204)
+
+        advice_request.attempts_used += 1
+        advice_request.status = AdviceRequest.Status.PROCESSING
+        advice_request.claimed_at = now
+        advice_request.save(
+            update_fields=["status", "attempts_used", "claimed_at", "updated_at"]
+        )
+        transaction_row = advice_request.transaction
+
+    return JsonResponse(
+        {
+            "request": advice_request.pk,
+            "attempts_remaining": max(
+                0, settings.WORKER_MAX_ATTEMPTS - advice_request.attempts_used
+            ),
+            "transaction": {
+                "id": transaction_row.pk,
+                "description": transaction_row.description,
+                "amount_pence": transaction_row.amount_pence,
+                "account_kind": transaction_row.account.kind,
+            },
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
+@worker_required
+def advice_result(request, pk):
+    """Accept validated advice, an abstention, or a bounded failure."""
+    try:
+        body = _json_body(request)
+    except ApiError as exc:
+        return _error(exc)
+    outcome = body.get("outcome")
+    if outcome not in {"suggested", "abstained", "failed"}:
+        return JsonResponse({"error": "unsupported advice outcome"}, status=400)
+
+    with transaction.atomic():
+        advice_request = (
+            AdviceRequest.objects.select_for_update()
+            .select_related("transaction")
+            .filter(pk=pk)
+            .first()
+        )
+        if advice_request is None:
+            return JsonResponse({"error": "advice request not found"}, status=404)
+        if advice_request.status != AdviceRequest.Status.PROCESSING:
+            return JsonResponse({"error": "advice request is not open"}, status=409)
+
+        if outcome == "failed":
+            failure = str(body.get("failure") or "Advice unavailable.")[:500]
+            advice_request.last_failure = failure
+            advice_request.claimed_at = None
+            if advice_request.attempts_used >= settings.WORKER_MAX_ATTEMPTS:
+                advice_request.status = AdviceRequest.Status.FAILED
+            else:
+                advice_request.status = AdviceRequest.Status.PENDING
+            advice_request.save(
+                update_fields=["status", "last_failure", "claimed_at", "updated_at"]
+            )
+            return JsonResponse({"status": advice_request.status})
+
+        if outcome == "abstained":
+            advice_request.status = AdviceRequest.Status.COMPLETED
+            advice_request.claimed_at = None
+            advice_request.last_failure = ""
+            advice_request.save(
+                update_fields=["status", "claimed_at", "last_failure", "updated_at"]
+            )
+            return JsonResponse({"status": advice_request.status})
+
+        try:
+            fields = advisory_fields(body.get("suggestion"))
+        except ValueError as exc:
+            advice_request.last_failure = f"Invalid advice: {exc}"[:500]
+            advice_request.claimed_at = None
+            if advice_request.attempts_used >= settings.WORKER_MAX_ATTEMPTS:
+                advice_request.status = AdviceRequest.Status.FAILED
+            else:
+                advice_request.status = AdviceRequest.Status.PENDING
+            advice_request.save(
+                update_fields=["status", "last_failure", "claimed_at", "updated_at"]
+            )
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        ClassificationSuggestion.objects.create(
+            transaction=advice_request.transaction, **fields
+        )
+        advice_request.status = AdviceRequest.Status.COMPLETED
+        advice_request.claimed_at = None
+        advice_request.last_failure = ""
+        advice_request.save(
+            update_fields=["status", "claimed_at", "last_failure", "updated_at"]
+        )
+    return JsonResponse({"status": advice_request.status})

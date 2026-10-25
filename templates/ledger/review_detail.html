@@ -87,6 +87,43 @@
             </form>
           {% endif %}
         </section>
+      {% elif advice_request or machine_unresolved %}
+        <section class="panel" aria-labelledby="advice-request-heading">
+          <h2 id="advice-request-heading">Local advice</h2>
+          <p class="muted">
+            Advice is optional and never changes source facts. It is generated on
+            the laptop and can be retried without re-importing the statement.
+          </p>
+          {% if advice_request %}
+            {% if advice_request.last_failure %}
+              <div class="notice notice-warning" role="alert">
+                <p>Last attempt: {{ advice_request.last_failure }}</p>
+              </div>
+            {% endif %}
+            {% if advice_request.status == "pending" %}
+              <p role="status">Requested. Waiting for the laptop to generate advice.</p>
+            {% elif advice_request.status == "processing" %}
+              <p role="status">The laptop is generating advice now.</p>
+            {% elif advice_request.status == "completed" %}
+              <p>The model produced no usable suggestion; resolve this row manually.</p>
+            {% elif advice_request.status == "failed" %}
+              <p class="muted">No further automatic attempts will be made.</p>
+            {% endif %}
+            {% if advice_request.status == "failed" or advice_request.status == "completed" %}
+              <form method="post" action="{% url 'ledger:review_detail' transaction.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="request_advice">
+                <button type="submit" class="button button-secondary">Request advice again</button>
+              </form>
+            {% endif %}
+          {% else %}
+            <form method="post" action="{% url 'ledger:review_detail' transaction.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="request_advice">
+              <button type="submit" class="button button-secondary">Request local advice</button>
+            </form>
+          {% endif %}
+        </section>
       {% endif %}
       <section class="panel" aria-labelledby="correct-heading">
         <h2 id="correct-heading">Confirm a classification</h2>

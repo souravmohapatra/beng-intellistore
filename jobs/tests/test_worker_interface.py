@@ -8,13 +8,13 @@ import tempfile
 import time
 from pathlib import Path
 
-from django.test import LiveServerTestCase, TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
 from jobs.models import Job, JobAttempt, JobResult, WorkerCredential
 from ledger.models import Upload
 from ledger.tests.fixtures import CSV_TEXT
-from ledger.tests.support import UploadSetupMixin
+from ledger.tests.support import RetryingLiveServerTestCase, UploadSetupMixin
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -232,7 +232,7 @@ class RoundTripTests(WorkerTestCase):
         self.assertEqual(wrong_attempt.status_code, 409)
 
 
-class WorkerProcessTests(UploadSetupMixin, LiveServerTestCase):
+class WorkerProcessTests(UploadSetupMixin, RetryingLiveServerTestCase):
     def test_worker_claims_downloads_returns_outcome_and_cleans_temp_files(self):
         self.upload(CSV_TEXT, filename="export.txt")
         upload = Upload.objects.get(filename="export.txt")

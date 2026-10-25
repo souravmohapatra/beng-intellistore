@@ -11,6 +11,7 @@ import sys
 import time
 from pathlib import Path
 
+from worker.advisory import client_from_env
 from worker.client import LeaseLost, WorkerClient, process_available
 
 
@@ -31,10 +32,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--poll-interval must be finite and non-negative")
 
     client = WorkerClient(args.base_url, args.token)
+    inference = client_from_env()
     while True:
         processed = False
         try:
-            for result in process_available(client, args.work_root):
+            for result in process_available(client, args.work_root, inference):
                 processed = True
                 print(json.dumps(result), flush=True)
         except LeaseLost as exc:

@@ -292,6 +292,39 @@ MAX_ADVICE_PER_SECTION = 200
 ADVISORY_CLASSIFICATIONS = {choice for choice, _label in Correction.Classification.choices}
 
 
+def advisory_fields(entry) -> dict:
+    """Validate one advisory entry; raise ValueError if it must not be shown."""
+    if not isinstance(entry, dict):
+        raise ValueError("suggestion must be an object")
+    try:
+        version = _bounded_int(entry["version"])
+        confidence = float(entry["confidence"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("suggestion fields are malformed") from exc
+    classification = entry.get("classification")
+    explanation = str(entry.get("explanation") or "").strip()
+    model = str(entry.get("model") or "").strip()
+    prompt_version = str(entry.get("prompt_version") or "").strip()
+    if version != ADVISORY_VERSION:
+        raise ValueError("unsupported advisory version")
+    if classification not in ADVISORY_CLASSIFICATIONS:
+        raise ValueError("unsupported advisory classification")
+    if not 0.0 <= confidence <= 1.0:
+        raise ValueError("advice confidence is out of range")
+    if not explanation:
+        raise ValueError("advice explanation is required")
+    if not model:
+        raise ValueError("advice model is required")
+    return {
+        "version": version,
+        "classification": classification,
+        "confidence": confidence,
+        "explanation": explanation[:500],
+        "model": model[:100],
+        "prompt_version": prompt_version[:20],
+    }
+
+
 def _store_suggestions(created, raw_suggestions) -> None:
     """Store only well-formed advice for rows the deterministic rules left unresolved.
 
@@ -306,44 +339,19 @@ def _store_suggestions(created, raw_suggestions) -> None:
     for entry in raw_suggestions:
         if stored >= MAX_ADVICE_PER_SECTION:
             return
-        if not isinstance(entry, dict):
-            continue
         try:
             page = _positive_int(entry["page"])
             row_number = _positive_int(entry["row"])
-            version = _bounded_int(entry["version"])
-            confidence = float(entry["confidence"])
+            fields = advisory_fields(entry)
         except (KeyError, TypeError, ValueError):
             continue
-        classification = entry.get("classification")
-        explanation = str(entry.get("explanation") or "").strip()
-        model = str(entry.get("model") or "").strip()
-        prompt_version = str(entry.get("prompt_version") or "").strip()
         transaction = by_location.get((page, row_number))
-        if (
-            transaction is None
-            or version != ADVISORY_VERSION
-            or classification not in ADVISORY_CLASSIFICATIONS
-            or not 0.0 <= confidence <= 1.0
-            or not explanation
-            or not model
-            or len(explanation) > 500
-            or len(model) > 100
-            or len(prompt_version) > 20
-        ):
+        if transaction is None:
             continue
         if classify_source(transaction) is not None:
             # Deterministic evidence already resolves this row; advice adds nothing.
             continue
-        ClassificationSuggestion.objects.create(
-            transaction=transaction,
-            version=version,
-            classification=classification,
-            confidence=confidence,
-            explanation=explanation[:500],
-            model=model[:100],
-            prompt_version=prompt_version[:20],
-        )
+        ClassificationSuggestion.objects.create(transaction=transaction, **fields)
         stored += 1
 
 

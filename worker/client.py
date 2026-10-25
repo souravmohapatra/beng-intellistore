@@ -15,7 +15,7 @@ import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 
-from worker.advisory import client_from_env, collect_advice
+from worker.advisory import collect_advice, client_from_env
 
 
 class WorkerError(Exception):
@@ -73,6 +73,14 @@ class WorkerClient:
     def submit_result(self, job_id: int, payload: dict):
         return self._request(
             "POST", f"/api/worker/jobs/{job_id}/result/", payload
+        )
+
+    def claim_advice(self):
+        return self._request("POST", "/api/worker/advice/claims/")
+
+    def submit_advice(self, request_id: int, payload: dict):
+        return self._request(
+            "POST", f"/api/worker/advice/{request_id}/result/", payload
         )
 
 
@@ -254,14 +262,44 @@ def build_result(claim: dict, parsed, advices: dict | None = None) -> dict:
 
 
 def process_available(
-    client: WorkerClient, work_root: Path | None
+    client: WorkerClient, work_root: Path | None, inference=None
 ) -> Iterator[dict]:
     """Yield each completed job until no work remains, then become idle."""
     while True:
         result = process_one(client, work_root)
         if result is None:
-            return
+            break
         yield result
+    if inference is not None:
+        yield from process_advice_requests(client, inference)
+
+
+def process_advice_requests(client: WorkerClient, inference) -> Iterator[dict]:
+    """Drain explicit advice requests independently of financial imports."""
+    from worker.advisory import AdvisoryClientError
+
+    while True:
+        claim = client.claim_advice()
+        if claim is None:
+            return
+        transaction = claim["transaction"]
+        try:
+            suggestion = inference.suggest_classification(
+                description=transaction["description"],
+                amount_pence=transaction["amount_pence"],
+                account_kind=transaction["account_kind"],
+            )
+        except AdvisoryClientError as exc:
+            submitted = client.submit_advice(
+                claim["request"],
+                {"outcome": "failed", "failure": type(exc).__name__},
+            )
+        else:
+            submitted = client.submit_advice(
+                claim["request"],
+                {"outcome": "suggested", "suggestion": suggestion.to_dict()},
+            )
+        yield {"advice_request": claim["request"], **submitted}
 
 
 def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:

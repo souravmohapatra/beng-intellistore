@@ -7,14 +7,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-from django.test import LiveServerTestCase, TestCase
+from django.test import TestCase
 from django.urls import reverse
 
 from interpretation.lloyds_current import parse
 from jobs.models import Job, WorkerCredential
 from ledger.models import Account, AccountKind, BalanceObservation, Transaction, Upload
 from ledger.tests.statement_fixtures import extract_text, lloyds_current_pdf
-from ledger.tests.support import UploadSetupMixin
+from ledger.tests.support import RetryingLiveServerTestCase, UploadSetupMixin
 from worker.client import build_result
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -197,7 +197,7 @@ class RejectionTests(PublicationTestCase):
         self.assertEqual(Upload.objects.get().status, Upload.Status.PENDING)
 
 
-class WorkerInterpretationTests(UploadSetupMixin, LiveServerTestCase):
+class WorkerInterpretationTests(UploadSetupMixin, RetryingLiveServerTestCase):
     def test_worker_imports_a_lloyds_current_statement_end_to_end(self):
         self.upload(lloyds_current_pdf(), filename="lloyds-current.pdf")
         upload = Upload.objects.get(filename="lloyds-current.pdf")

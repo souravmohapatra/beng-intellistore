@@ -212,3 +212,31 @@ class ProcessingSchedule(models.Model):
     wake_requested_at = models.DateTimeField(null=True, blank=True)
     readiness_deadline = models.DateTimeField(null=True, blank=True)
     worker_ready_at = models.DateTimeField(null=True, blank=True)
+
+
+class AdviceRequest(models.Model):
+    """An explicit request for local advice, independent of financial import.
+
+    Advice is optional and may be retried after failure without re-importing the
+    statement or changing any committed financial fact.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    transaction = models.OneToOneField(
+        "ledger.Transaction",
+        on_delete=models.CASCADE,
+        related_name="advice_request",
+    )
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    attempts_used = models.PositiveSmallIntegerField(default=0)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    last_failure = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
