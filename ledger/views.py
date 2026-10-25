@@ -339,6 +339,9 @@ class ReviewDetailView(LoginRequiredMixin, View):
                     status=400,
                 )
             with transaction_db.atomic():
+                locked_transaction = Transaction.objects.select_for_update().get(
+                    pk=transaction.pk
+                )
                 locked = ClassificationSuggestion.objects.select_for_update().get(
                     pk=suggestion.pk
                 )
@@ -346,13 +349,13 @@ class ReviewDetailView(LoginRequiredMixin, View):
                     return self._render(
                         request, pk, error="That suggestion was already resolved.", status=400
                     )
-                for correction in transaction.corrections.filter(
+                for correction in locked_transaction.corrections.filter(
                     reverted_at__isnull=True
                 ):
                     correction.reverted_at = timezone.now()
                     correction.save(update_fields=["reverted_at"])
                 Correction.objects.create(
-                    transaction=transaction,
+                    transaction=locked_transaction,
                     classification=locked.classification,
                     note=(
                         f"Accepted local suggestion ({locked.model}, "
@@ -506,32 +509,39 @@ class ReviewDetailView(LoginRequiredMixin, View):
             transaction.save(update_fields=["needs_review"])
             return redirect("ledger:review_detail", pk=pk)
         if action == "revert":
-            for correction in transaction.corrections.filter(reverted_at__isnull=True):
-                correction.reverted_at = timezone.now()
-                correction.save(update_fields=["reverted_at"])
+            with transaction_db.atomic():
+                locked = Transaction.objects.select_for_update().get(pk=transaction.pk)
+                for correction in locked.corrections.filter(reverted_at__isnull=True):
+                    correction.reverted_at = timezone.now()
+                    correction.save(update_fields=["reverted_at"])
             return redirect("ledger:review_detail", pk=pk)
         if action == "correct":
             classification = request.POST.get("classification")
             if classification not in Correction.Classification.values:
                 return HttpResponseBadRequest("Unknown classification")
-            if not classification_applies(classification, transaction):
-                return self._render(
-                    request,
-                    pk,
-                    error=(
-                        "That classification does not match the source's signed "
-                        "direction; no correction was saved."
-                    ),
-                    status=400,
-                )
             with transaction_db.atomic():
-                for correction in transaction.corrections.filter(
+                # Serialize competing decisions for this row: exactly one
+                # correction may remain active after concurrent submissions.
+                locked = Transaction.objects.select_for_update().select_related(
+                    "account"
+                ).get(pk=transaction.pk)
+                if not classification_applies(classification, locked):
+                    return self._render(
+                        request,
+                        pk,
+                        error=(
+                            "That classification does not match the source's signed "
+                            "direction; no correction was saved."
+                        ),
+                        status=400,
+                    )
+                for correction in locked.corrections.filter(
                     reverted_at__isnull=True
                 ):
                     correction.reverted_at = timezone.now()
                     correction.save(update_fields=["reverted_at"])
                 Correction.objects.create(
-                    transaction=transaction,
+                    transaction=locked,
                     classification=classification,
                     note=(request.POST.get("note") or "")[:1000],
                 )

@@ -50,6 +50,10 @@ Evidence:
   transaction without re-import (one transaction only). A separate run with
   `INFERENCE_URL=http://127.0.0.1:1` imported the statement, logged one bounded
   advice warning, and left the row manually reviewable.
+- Advice claims are fenced by credential, unguessable token and lease. Tests show
+  a stale worker whose lease expired cannot complete the reclaimed claim (409),
+  a different credential cannot submit (409), an expired lease cannot submit even
+  with the token (409), and a missing token is rejected (400).
 - Unit tests cover timeout/connection failure, HTTP error, malformed JSON,
   invented classification, invalid advice results and missing fields; none
   re-run the financial import. Logs contain no description, amount or source

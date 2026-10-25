@@ -51,8 +51,11 @@ Verified behavior:
 - New `ledger.tests.test_integrity`: a confirmed correction survives re-import of
   the same original (duplicate outcome, six transactions before/after, correction
   history intact and still active).
-- Changed-identity/mapping mismatch is rejected for consolidated sources by the
-  existing published-section/source-mapping checks.
+- New `ledger.tests.test_review_concurrency`: two simultaneous public correction
+  submissions against PostgreSQL serialize on the transaction row; both succeed
+  (302) and exactly one correction remains active, with the other retained as
+  reverted history. The handler now locks the transaction row before reverting
+  and inserting, for both manual corrections and accepted advice.
 - Advice claims are fenced by credential, token and lease so stale advice cannot
   complete a newer claim (see task07).
 
