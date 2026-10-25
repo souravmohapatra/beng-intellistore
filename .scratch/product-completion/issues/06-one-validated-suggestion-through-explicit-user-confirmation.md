@@ -1,10 +1,10 @@
 # 06: One validated suggestion through explicit user confirmation
 
-Status: done locally
+Status: needs-info (implementation complete locally; real-runtime demonstration pending)
 Claimed by: —
 Approval: task division approved by Sourav; planning/publication only.
 Execution authorization: authorized by Sourav's instruction to implement the active backlog.
-Blocked by: [05](./05-isolated-laptop-inference-runtime-and-worker-connectivity.md) — local contract delivered; real runtime demonstration remains open in05.
+Blocked by: [05](./05-isolated-laptop-inference-runtime-and-worker-connectivity.md) — the real inference runtime and end-to-end real-model demonstration remain open.
 Draft reference: T06
 Parent: [Authoritative completion specification](../spec.md)
 Historical evidence: [27](../../initial-release/issues/27-show-validated-optional-advice-without-risking-financial-imports.md)
@@ -19,10 +19,11 @@ One validated suggestion through explicit user confirmation. Complete the end-to
   classification or abstention → review → explicit confirmation or dismissal.
 - [x] Preserve model/prompt version and provenance; suggestions cannot rewrite
   amounts, dates, balances or override confirmed corrections.
-- [x] Demonstrate the whole path in isolation. task 08 gates normal-use enablement,
-  not controlled evaluation; this avoids a qualification/implementation cycle.
 - [x] Integrate with task 03 through the existing review interface; shared ownership
   must be coordinated, but visual polish is not a technical blocker.
+- [ ] Demonstrate the whole path with a real local runtime request (pinned
+  candidate), not only a controlled adapter response. Implementation is otherwise
+  complete; this belongs to the user-run deployment checklist with task05/08.
 
 ## Decision and external gates
 
@@ -37,8 +38,7 @@ Follow [common completion rules](../spec.md#completion-rules): TDD for changed p
 
 ## Current evidence and completion
 
-Completed locally with controlled advisory responses; real-runtime inference and
-the qualification gate remain tasks05/08.
+Implementation is complete locally; the real-runtime demonstration remains open.
 
 Implementation:
 - `ClassificationSuggestion` stores version, allowed classification, confidence,
@@ -59,6 +59,11 @@ Verification:
 - Browser against isolated PostgreSQL: seeded open suggestion rendered with model,
   prompt version, confidence, explanation and effect wording; confirming created
   the correction, closed the suggestion and showed it in history;390px no overflow.
+- The delivered worker path was also exercised end-to-end against a **controlled
+  local adapter** (not a real model): review request → worker claim → validated
+  suggestion → explicit confirmation, with claim fencing. This is not evidence of
+  model quality or real-runtime interoperability; task05/08's user-run steps must
+  repeat it with the pinned candidate before advice is enabled.
 - Malformed advice, unknown classification, out-of-range confidence and unknown
   source rows produced no suggestion while the import still succeeded.
 - Actual model quality/fit is not claimed; enablement stays gated by task08.

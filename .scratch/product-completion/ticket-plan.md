@@ -17,7 +17,7 @@ Published IDs are dependency-ordered. Draft T12 becomes10, T10 becomes11, T11 be
 | [03 — Source-first review and reversible decisions](issues/03-source-first-review-and-reversible-decisions.md) | T03 | None | done locally |
 | [04 — Understand and recover an upload's processing state](issues/04-understand-and-recover-an-upload-s-processing-state.md) | T04 | None | done locally |
 | [05 — Isolated laptop inference runtime and worker connectivity](issues/05-isolated-laptop-inference-runtime-and-worker-connectivity.md) | T05 | None | local code done; needs laptop deployment |
-| [06 — One validated suggestion through explicit user confirmation](issues/06-one-validated-suggestion-through-explicit-user-confirmation.md) | T06 | 05 | done locally |
+| [06 — One validated suggestion through explicit user confirmation](issues/06-one-validated-suggestion-through-explicit-user-confirmation.md) | T06 | 05 | implementation done; needs real-runtime demo |
 | [07 — Advisory failure and separate bounded recovery](issues/07-advisory-failure-and-separate-bounded-recovery.md) | T07 | 06 | done locally |
 | [08 — Qualify the model and gate enablement](issues/08-qualify-the-model-and-gate-enablement.md) | T08 | 05, 06, 07 | needs-info (labels + laptop) |
 | [09 — Preserve financial results and corrections across interruptions](issues/09-preserve-financial-results-and-corrections-across-interruptions.md) | T09 | None | done locally |
@@ -25,10 +25,10 @@ Published IDs are dependency-ordered. Draft T12 becomes10, T10 becomes11, T11 be
 | [11 — Qualify real-host scheduling, wake and keep-awake lifecycle](issues/11-qualify-real-host-scheduling-wake-and-keep-awake-lifecycle.md) | T10 | 09, 08 | needs-info |
 | [12 — Actionable operational status without private logging](issues/12-actionable-operational-status-without-private-logging.md) | T11 | 04, 07, 09, 10 | done locally |
 | [13 — Restore and verify a recovery generation in isolation](issues/13-restore-and-verify-a-recovery-generation-in-isolation.md) | T13 | 10 | local proof done; needs NAS run |
-| [14 — Verify actual supplied statement families end to end](issues/14-verify-actual-supplied-statement-families-end-to-end.md) | T14 | 09 | needs-info |
-| [15 — Measure and meet real-host dashboard/search latency](issues/15-measure-and-meet-real-host-dashboard-search-latency.md) | T15 | 02 | needs-info |
-| [16 — Accept complete desktop, keyboard and actual-phone journeys](issues/16-accept-complete-desktop-keyboard-and-actual-phone-journeys.md) | T16 | 01, 02, 03, 04, 07, 08, 12 | needs-info |
-| [17 — Integrated release qualification and operating handoff](issues/17-integrated-release-qualification-and-operating-handoff.md) | T17 | 11, 13, 14, 15, 16 | needs-info |
+| [14 — Verify actual supplied statement families end to end](issues/14-verify-actual-supplied-statement-families-end-to-end.md) | T14 | 09 | synthetic pass; needs private sources |
+| [15 — Measure and meet real-host dashboard/search latency](issues/15-measure-and-meet-real-host-dashboard-search-latency.md) | T15 | 02 | harness ready; needs mini-PC run |
+| [16 — Accept complete desktop, keyboard and actual-phone journeys](issues/16-accept-complete-desktop-keyboard-and-actual-phone-journeys.md) | T16 | 01, 02, 03, 04, 07, 08, 12 | local audit pass; needs phone/deployment |
+| [17 — Integrated release qualification and operating handoff](issues/17-integrated-release-qualification-and-operating-handoff.md) | T17 | 11, 13, 14, 15, 16 | ledger drafted; host gates open |
 
 Task11's08 dependency gates final combined-workload timing acceptance; approved parser/controller investigation can start earlier after09. Host deployment, power/fault tests and final release are independently permission-gated. None/ready does not mean authorized.
 
