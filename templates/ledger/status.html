@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Status — Statement Intelligence{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>Status</h1>
+    <p class="muted">What is working, what needs action, and when each source last succeeded. Ordinary browsing does not depend on the laptop or NAS being available.</p>
+  </div>
+</header>
+
+<div class="grid-two">
+  <section class="panel stack" aria-labelledby="processing-heading">
+    <h2 id="processing-heading">Processing</h2>
+    <dl class="detail-list">
+      <dt>Waiting</dt><dd>{{ waiting_jobs }} upload(s)</dd>
+      <dt>Released</dt><dd>{{ released_jobs }} upload(s)</dd>
+      <dt>Processing</dt><dd>{{ processing_jobs }} upload(s)</dd>
+      <dt>Failed</dt><dd>{{ failed_jobs }} upload(s)</dd>
+      <dt>Last completed</dt>
+      <dd>{% if last_completed_job %}{{ last_completed_job.upload.filename }} ({{ last_completed_job.upload.status }}){% else %}No completed processing yet.{% endif %}</dd>
+    </dl>
+    {% if failed_jobs %}
+      <div class="notice notice-error" role="alert">
+        <p>Some processing failed. Open the upload receipt for the failure and retry.</p>
+      </div>
+    {% endif %}
+    <p><a class="text-link" href="{% url 'ledger:uploads' %}">Open uploads</a></p>
+  </section>
+
+  <section class="panel stack" aria-labelledby="advice-heading">
+    <h2 id="advice-heading">Local advice</h2>
+    <dl class="detail-list">
+      <dt>Waiting</dt><dd>{{ advice_pending }} request(s)</dd>
+      <dt>Processing</dt><dd>{{ advice_processing }} request(s)</dd>
+      <dt>Failed</dt><dd>{{ advice_failed }} request(s)</dd>
+      <dt>Last suggestion</dt>
+      <dd>{% if last_suggestion %}{{ last_suggestion.get_classification_display }} from {{ last_suggestion.model }} ({{ last_suggestion.created_at|date:"Y-m-d H:i" }}){% else %}No suggestion recorded.{% endif %}</dd>
+    </dl>
+    {% if advice_failed %}
+      <div class="notice notice-warning" role="alert">
+        <p>Some advice requests exhausted their attempts. Retry from the review item or resolve it manually.</p>
+      </div>
+    {% endif %}
+    <p class="muted">Advice is optional; unresolved rows remain reviewable without it.</p>
+  </section>
+
+  <section class="panel stack" aria-labelledby="backup-heading">
+    <h2 id="backup-heading">Backup</h2>
+    {% if backup %}
+      <dl class="detail-list">
+        <dt>Last outcome</dt><dd>{{ backup.status }}</dd>
+        <dt>Finished</dt><dd>{{ backup.finished_at|default:"unknown" }}</dd>
+        <dt>Generation</dt><dd>{{ backup.generation|default:"—" }}</dd>
+      </dl>
+      {% if backup.status == "failed" %}
+        <div class="notice notice-error" role="alert">
+          <p>Backup failed{% if backup.message %}: {{ backup.message }}{% endif %}. Local data is untouched; fix the destination and rerun.</p>
+        </div>
+      {% endif %}
+    {% else %}
+      <p>No backup outcome recorded. No successful backup has been reported to the application.</p>
+    {% endif %}
+    <p class="muted">Backups run at 03:00 Europe/London and keep seven successful generations. NAS failure never blocks normal use or deletes local data.</p>
+  </section>
+</div>
+{% endblock %}

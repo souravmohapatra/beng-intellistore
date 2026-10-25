@@ -22,6 +22,7 @@
             <a href="{% url 'ledger:search' %}"{% if current == 'search' %} aria-current="page"{% endif %}>Transactions</a>
             <a href="{% url 'ledger:review' %}"{% if current == 'review' or current == 'review_detail' %} aria-current="page"{% endif %}>Review</a>
             <a href="{% url 'ledger:accounts' %}"{% if current == 'accounts' or current == 'account_transactions' %} aria-current="page"{% endif %}>Accounts</a>
+            <a href="{% url 'ledger:status' %}"{% if current == 'status' %} aria-current="page"{% endif %}>Status</a>
           </nav>
           <form class="signout" method="post" action="{% url 'logout' %}">
             {% csrf_token %}

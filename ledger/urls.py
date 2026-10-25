@@ -19,6 +19,7 @@ urlpatterns = [
     path("review/", views.ReviewListView.as_view(), name="review"),
     path("review/<int:pk>/", views.ReviewDetailView.as_view(), name="review_detail"),
     path("uploads/", views.UploadListView.as_view(), name="uploads"),
+    path("status/", views.SystemStatusView.as_view(), name="status"),
     path("uploads/<int:pk>/", views.UploadDetailView.as_view(), name="upload_detail"),
     path(
         "uploads/<int:pk>/original",

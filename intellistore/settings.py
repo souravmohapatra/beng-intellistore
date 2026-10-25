@@ -148,3 +148,8 @@ LOGGING = {
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/login/"
+
+# Last backup outcome written by the backup container into a shared status mount.
+BACKUP_STATUS_FILE = _env(
+    "BACKUP_STATUS_FILE", str(DATA_DIR / "backup-status.json")
+)

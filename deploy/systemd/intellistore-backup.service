@@ -1,0 +1,14 @@
+[Unit]
+Description=Intellistore nightly consistent backup to NAS
+Requires=intellistore-app.service
+After=intellistore-app.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/beng-intellistore/runtime.env
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+ExecStartPre=/usr/bin/test -n "${DOCKER_HOST}"
+ExecStartPre=/usr/bin/test -n "${INTELLISTORE_COMPOSE_DIR}"
+ExecStartPre=/usr/bin/test -n "${INTELLISTORE_BACKUP_DIR}"
+ExecStart=/usr/bin/env docker --host=${DOCKER_HOST} compose --env-file /dev/null --project-directory=${INTELLISTORE_COMPOSE_DIR} -f ${INTELLISTORE_COMPOSE_DIR}/compose.production.yaml run --rm backup
+TimeoutStartSec=30min

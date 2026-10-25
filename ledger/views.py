@@ -786,3 +786,56 @@ class UploadOriginalView(LoginRequiredMixin, View):
             as_attachment=False,
             filename=upload.filename,
         )
+
+
+class SystemStatusView(LoginRequiredMixin, TemplateView):
+    """Operational status for processing, advice and backup freshness."""
+
+    template_name = "ledger/status.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        jobs = Job.objects.all()
+        advice = AdviceRequest.objects.all()
+        context.update(
+            {
+                "waiting_jobs": jobs.filter(status=Job.Status.WAITING).count(),
+                "released_jobs": jobs.filter(status=Job.Status.RELEASED).count(),
+                "processing_jobs": jobs.filter(status=Job.Status.PROCESSING).count(),
+                "failed_jobs": jobs.filter(status=Job.Status.FAILED).count(),
+                "last_completed_job": jobs.filter(status=Job.Status.COMPLETED)
+                .order_by("-pk")
+                .first(),
+                "advice_pending": advice.filter(
+                    status=AdviceRequest.Status.PENDING
+                ).count(),
+                "advice_processing": advice.filter(
+                    status=AdviceRequest.Status.PROCESSING
+                ).count(),
+                "advice_failed": advice.filter(
+                    status=AdviceRequest.Status.FAILED
+                ).count(),
+                "last_suggestion": ClassificationSuggestion.objects.order_by("-pk").first(),
+                "backup": _backup_status(),
+            }
+        )
+        return context
+
+
+def _backup_status():
+    """Read the last backup outcome written by the isolated backup container."""
+    path = Path(settings.BACKUP_STATUS_FILE)
+    try:
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {
+        "status": str(data.get("status") or "unknown"),
+        "finished_at": str(data.get("finished_at") or ""),
+        "generation": str(data.get("generation") or ""),
+        "message": str(data.get("message") or ""),
+    }

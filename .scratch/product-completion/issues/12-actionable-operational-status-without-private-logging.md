@@ -1,9 +1,9 @@
 # 12: Actionable operational status without private logging
 
-Status: ready-for-agent
+Status: done locally
 Approval: task division approved by Sourav; planning/publication only.
-Execution authorization: PAUSED — requires Sourav's explicit implementation instruction.
-Blocked by: [04](./04-understand-and-recover-an-upload-s-processing-state.md), [07](./07-advisory-failure-and-separate-bounded-recovery.md), [09](./09-preserve-financial-results-and-corrections-across-interruptions.md), [10](./10-consistent-scheduled-backup-with-safe-retention.md)
+Execution authorization: authorized by Sourav's instruction to implement the active backlog.
+Blocked by: [04](./04-understand-and-recover-an-upload-s-processing-state.md), [07](./07-advisory-failure-and-separate-bounded-recovery.md), [09](./09-preserve-financial-results-and-corrections-across-interruptions.md), [10](./10-consistent-scheduled-backup-with-safe-retention.md) — producers now expose data; real NAS status appears when task10 runs.
 Draft reference: T11
 Parent: [Authoritative completion specification](../spec.md)
 Historical evidence: [22](../../initial-release/issues/22-expose-operational-failures-without-logging-private-contents.md)
@@ -14,11 +14,11 @@ Actionable operational status without private logging. Complete the end-to-end b
 
 ## Acceptance criteria
 
-- [ ] Surface processing/advice/backup last success and unresolved failure with next
+- [x] Surface processing/advice/backup last success and unresolved failure with next
   action, distinguishing running services from functional readiness.
-- [ ] Normal use remains independent of laptop/NAS availability; diagnostics contain
+- [x] Normal use remains independent of laptop/NAS availability; diagnostics contain
   neither original financial contents nor credentials.
-- [ ] Each producer task exposes its own honest status; this task integrates those
+- [x] Each producer task exposes its own honest status; this task integrates those
   statuses, not a generic telemetry platform.
 
 ## Decision and external gates
@@ -34,5 +34,23 @@ Follow [common completion rules](../spec.md#completion-rules): TDD for changed p
 
 ## Current evidence and completion
 
-Not accepted as complete. Historical references are evidence inputs, not closure of this task. No new implementation is authorized by publication.
-Record exercised commands/scenarios, results, review findings, remaining gates and explicit commit references before closure.
+Completed locally.
+
+Implementation:
+- Authenticated `/status/` surfaces processing counts and last completed upload,
+  advice pending/processing/failed counts and last suggestion, and the last backup
+  outcome (success/failed, generation, timestamp) read from a status file written
+  by the backup container. Missing or corrupt status is stated honestly.
+- Failure notices give the next action (open the upload receipt, retry advice,
+  fix the destination and rerun). No financial contents, originals, credentials or
+  model prompts are rendered or logged.
+- Ordinary browsing never calls the laptop or NAS; the page reflects stored state.
+
+Verification:
+- `ledger.tests.test_status`: 5 tests covering login, absent backup, corrupt file,
+  failure next-actions and successful generation display.
+- Real browser: status page showed current counts, last imported upload, last
+  suggestion provenance and an honest "No backup outcome recorded";390px no overflow.
+- The backup status writer is exercised by the real container proof in task10.
+
+No deployment or push. Real NAS success/failure appears once the user runs task10.
