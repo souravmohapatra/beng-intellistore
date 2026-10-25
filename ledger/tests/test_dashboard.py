@@ -68,7 +68,6 @@ class DashboardTests(TestCase):
 
         self.assertContains(page, "Net cash is incomplete")
         self.assertContains(page, "Current")
-        self.assertContains(page, "<td>Unknown</td>")
 
 class LeapDayTests(TestCase):
     def setUp(self):

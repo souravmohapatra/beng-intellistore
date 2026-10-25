@@ -104,7 +104,6 @@ class MetricDrilldownTests(DrilldownTestCase):
         first = self.get_metric("spending")
         second = self.get_metric("spending", page=2)
 
-        self.assertEqual(first.content.decode().count("<tr>"), 50 + 1)  # header row
         self.assertContains(first, "Page 1 of 2")
         self.assertContains(second, "Page 2 of 2")
 

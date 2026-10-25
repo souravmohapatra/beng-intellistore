@@ -1,27 +1,38 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en-GB">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Statement Intelligence{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'ledger/app.css' %}">
   </head>
-  <body>
-    {% if user.is_authenticated %}
-      <header>
-        <nav>
-          <a href="{% url 'ledger:overview' %}">Overview</a>
-          <a href="{% url 'ledger:uploads' %}">Uploads</a>
-          <a href="{% url 'ledger:search' %}">Search</a>
-          <a href="{% url 'ledger:review' %}">Review</a>
-          <form method="post" action="{% url 'logout' %}">
+  <body class="{% block body_class %}{% endblock %}">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="app{% if not user.is_authenticated %} app--plain{% endif %}">
+      {% if user.is_authenticated %}
+        {% with current=request.resolver_match.url_name %}
+        <header class="chrome">
+          <a class="brand" href="{% url 'ledger:overview' %}">
+            <span class="brand-mark" aria-hidden="true">i</span>
+            <span>Intellistore<small>Your statements, made clear</small></span>
+          </a>
+          <nav class="main-nav" aria-label="Main navigation">
+            <a href="{% url 'ledger:overview' %}"{% if current == 'overview' %} aria-current="page"{% endif %}>Overview</a>
+            <a href="{% url 'ledger:uploads' %}"{% if current == 'uploads' or current == 'upload_detail' %} aria-current="page"{% endif %}>Uploads</a>
+            <a href="{% url 'ledger:search' %}"{% if current == 'search' %} aria-current="page"{% endif %}>Transactions</a>
+            <a href="{% url 'ledger:review' %}"{% if current == 'review' or current == 'review_detail' %} aria-current="page"{% endif %}>Review</a>
+            <a href="{% url 'ledger:accounts' %}"{% if current == 'accounts' or current == 'account_transactions' %} aria-current="page"{% endif %}>Accounts</a>
+          </nav>
+          <form class="signout" method="post" action="{% url 'logout' %}">
             {% csrf_token %}
-            <button type="submit">Sign out</button>
+            <button type="submit" class="button button-secondary">Sign out</button>
           </form>
-        </nav>
-      </header>
-    {% endif %}
-    <main>
-      {% block content %}{% endblock %}
-    </main>
+        </header>
+        {% endwith %}
+      {% endif %}
+      <main class="workspace{% if not user.is_authenticated %} workspace--plain{% endif %}" id="main" tabindex="-1">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
   </body>
 </html>
