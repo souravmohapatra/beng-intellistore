@@ -237,6 +237,15 @@ class AdviceRequest(models.Model):
     )
     attempts_used = models.PositiveSmallIntegerField(default=0)
     claimed_at = models.DateTimeField(null=True, blank=True)
+    claimed_by = models.ForeignKey(
+        WorkerCredential,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="advice_claims",
+    )
+    claim_token = models.UUIDField(null=True, blank=True, editable=False)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
     last_failure = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

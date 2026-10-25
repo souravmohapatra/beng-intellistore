@@ -38,12 +38,12 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
         )
         self.credential, self.token = WorkerCredential.issue("advice-worker")
 
-    def api(self, name, payload=None, args=()):
+    def api(self, name, payload=None, args=(), token=None):
         return self.client.post(
             reverse(name, args=args),
             data=json.dumps(payload),
             content_type="application/json",
-            HTTP_AUTHORIZATION=f"Bearer {self.token}",
+            HTTP_AUTHORIZATION=f"Bearer {token or self.token}",
         )
 
     def request_advice(self):
@@ -113,7 +113,11 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
 
         response = self.api(
             "jobs:advice_result",
-            {"outcome": "suggested", "suggestion": self.suggestion()},
+            {
+                "claim_token": claimed["claim_token"],
+                "outcome": "suggested",
+                "suggestion": self.suggestion(),
+            },
             args=[claimed["request"]],
         )
 
@@ -137,7 +141,11 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
 
         response = self.api(
             "jobs:advice_result",
-            {"outcome": "suggested", "suggestion": self.suggestion("loan")},
+            {
+                "claim_token": claimed["claim_token"],
+                "outcome": "suggested",
+                "suggestion": self.suggestion("loan"),
+            },
             args=[claimed["request"]],
         )
 
@@ -151,7 +159,11 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
         first = self.api("jobs:claim_advice").json()
         failed = self.api(
             "jobs:advice_result",
-            {"outcome": "failed", "failure": "AdvisoryUnavailableError"},
+            {
+                "claim_token": first["claim_token"],
+                "outcome": "failed",
+                "failure": "AdvisoryUnavailableError",
+            },
             args=[first["request"]],
         )
         self.assertEqual(failed.status_code, 200)
@@ -168,7 +180,11 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
         second = self.api("jobs:claim_advice").json()
         done = self.api(
             "jobs:advice_result",
-            {"outcome": "suggested", "suggestion": self.suggestion()},
+            {
+                "claim_token": second["claim_token"],
+                "outcome": "suggested",
+                "suggestion": self.suggestion(),
+            },
             args=[second["request"]],
         )
         self.assertEqual(done.status_code, 200)
@@ -184,7 +200,11 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
             body = claimed.json()
             self.api(
                 "jobs:advice_result",
-                {"outcome": "failed", "failure": "AdvisoryUnavailableError"},
+                {
+                    "claim_token": body["claim_token"],
+                    "outcome": "failed",
+                    "failure": "AdvisoryUnavailableError",
+                },
                 args=[body["request"]],
             )
         request_row = AdviceRequest.objects.get()
@@ -200,7 +220,7 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
     def test_stale_processing_request_is_reclaimed(self):
         self.request_advice()
         first = self.api("jobs:claim_advice").json()
-        AdviceRequest.objects.update(claimed_at=timezone.now() - timedelta(hours=1))
+        AdviceRequest.objects.update(lease_expires_at=timezone.now() - timedelta(hours=1))
 
         second = self.api("jobs:claim_advice")
         self.assertEqual(second.status_code, 200)
@@ -212,7 +232,11 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
         claimed = self.api("jobs:claim_advice").json()
         self.api(
             "jobs:advice_result",
-            {"outcome": "suggested", "suggestion": self.suggestion()},
+            {
+                "claim_token": claimed["claim_token"],
+                "outcome": "suggested",
+                "suggestion": self.suggestion(),
+            },
             args=[claimed["request"]],
         )
         suggestion_row = ClassificationSuggestion.objects.get()
@@ -225,3 +249,92 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(AdviceRequest.objects.get().status, AdviceRequest.Status.PENDING)
+
+    def test_reclaimed_claim_fences_the_stale_worker(self):
+        self.request_advice()
+        stale = self.api("jobs:claim_advice").json()
+        AdviceRequest.objects.update(lease_expires_at=timezone.now() - timedelta(hours=1))
+
+        # A different worker reclaims after expiry, receiving its own token.
+        fresh = self.api("jobs:claim_advice").json()
+        self.assertNotEqual(stale["claim_token"], fresh["claim_token"])
+
+        rejected = self.api(
+            "jobs:advice_result",
+            {
+                "claim_token": stale["claim_token"],
+                "outcome": "suggested",
+                "suggestion": self.suggestion(),
+            },
+            args=[stale["request"]],
+        )
+        self.assertEqual(rejected.status_code, 409)
+        self.assertEqual(ClassificationSuggestion.objects.count(), 0)
+        self.assertEqual(
+            AdviceRequest.objects.get().status, AdviceRequest.Status.PROCESSING
+        )
+
+        accepted = self.api(
+            "jobs:advice_result",
+            {
+                "claim_token": fresh["claim_token"],
+                "outcome": "suggested",
+                "suggestion": self.suggestion(),
+            },
+            args=[fresh["request"]],
+        )
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(ClassificationSuggestion.objects.count(), 1)
+
+    def test_a_different_worker_credential_cannot_submit(self):
+        self.request_advice()
+        claimed = self.api("jobs:claim_advice").json()
+        _other_credential, other_token = WorkerCredential.issue("other-worker")
+
+        rejected = self.api(
+            "jobs:advice_result",
+            {
+                "claim_token": claimed["claim_token"],
+                "outcome": "suggested",
+                "suggestion": self.suggestion(),
+            },
+            args=[claimed["request"]],
+            token=other_token,
+        )
+
+        self.assertEqual(rejected.status_code, 409)
+        self.assertEqual(ClassificationSuggestion.objects.count(), 0)
+        self.assertEqual(
+            AdviceRequest.objects.get().status, AdviceRequest.Status.PROCESSING
+        )
+
+    def test_expired_lease_cannot_submit_even_with_the_right_token(self):
+        self.request_advice()
+        claimed = self.api("jobs:claim_advice").json()
+        AdviceRequest.objects.update(lease_expires_at=timezone.now() - timedelta(seconds=1))
+
+        rejected = self.api(
+            "jobs:advice_result",
+            {
+                "claim_token": claimed["claim_token"],
+                "outcome": "suggested",
+                "suggestion": self.suggestion(),
+            },
+            args=[claimed["request"]],
+        )
+
+        self.assertEqual(rejected.status_code, 409)
+        self.assertEqual(ClassificationSuggestion.objects.count(), 0)
+
+    def test_advice_result_requires_a_claim_token(self):
+        self.request_advice()
+        claimed = self.api("jobs:claim_advice").json()
+
+        rejected = self.api(
+            "jobs:advice_result",
+            {"outcome": "suggested", "suggestion": self.suggestion()},
+            args=[claimed["request"]],
+        )
+
+        self.assertEqual(rejected.status_code, 400)
+        self.assertEqual(ClassificationSuggestion.objects.count(), 0)

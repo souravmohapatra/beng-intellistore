@@ -283,6 +283,7 @@ def process_advice_requests(client: WorkerClient, inference) -> Iterator[dict]:
         if claim is None:
             return
         transaction = claim["transaction"]
+        token = claim["claim_token"]
         try:
             suggestion = inference.suggest_classification(
                 description=transaction["description"],
@@ -292,12 +293,20 @@ def process_advice_requests(client: WorkerClient, inference) -> Iterator[dict]:
         except AdvisoryClientError as exc:
             submitted = client.submit_advice(
                 claim["request"],
-                {"outcome": "failed", "failure": type(exc).__name__},
+                {
+                    "claim_token": token,
+                    "outcome": "failed",
+                    "failure": type(exc).__name__,
+                },
             )
         else:
             submitted = client.submit_advice(
                 claim["request"],
-                {"outcome": "suggested", "suggestion": suggestion.to_dict()},
+                {
+                    "claim_token": token,
+                    "outcome": "suggested",
+                    "suggestion": suggestion.to_dict(),
+                },
             )
         yield {"advice_request": claim["request"], **submitted}
 

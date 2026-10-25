@@ -6,6 +6,7 @@ user session, no database access and no access to unrelated originals.
 
 import hashlib
 import json
+import uuid
 from datetime import timedelta
 from functools import wraps
 from pathlib import Path
@@ -402,9 +403,8 @@ def claim_advice(request):
             with connection.cursor() as cursor:
                 cursor.execute("SELECT pg_advisory_xact_lock(%s)", [ADVICE_CLAIM_LOCK_KEY])
         now = timezone.now()
-        stale_before = now - timedelta(seconds=settings.WORKER_LEASE_SECONDS)
         if AdviceRequest.objects.select_for_update().filter(
-            status=AdviceRequest.Status.PROCESSING, claimed_at__gte=stale_before
+            status=AdviceRequest.Status.PROCESSING, lease_expires_at__gte=now
         ).exists():
             return HttpResponse(status=204)
         advice_request = (
@@ -414,7 +414,7 @@ def claim_advice(request):
                 Q(status=AdviceRequest.Status.PENDING)
                 | Q(
                     status=AdviceRequest.Status.PROCESSING,
-                    claimed_at__lt=stale_before,
+                    lease_expires_at__lt=now,
                 )
             )
             .order_by("created_at", "pk")
@@ -426,22 +426,46 @@ def claim_advice(request):
             advice_request.status = AdviceRequest.Status.FAILED
             advice_request.last_failure = "Advice attempt budget exhausted."
             advice_request.claimed_at = None
+            advice_request.claimed_by = None
+            advice_request.claim_token = None
+            advice_request.lease_expires_at = None
             advice_request.save(
-                update_fields=["status", "last_failure", "claimed_at", "updated_at"]
+                update_fields=[
+                    "status",
+                    "last_failure",
+                    "claimed_at",
+                    "claimed_by",
+                    "claim_token",
+                    "lease_expires_at",
+                    "updated_at",
+                ]
             )
             return HttpResponse(status=204)
 
         advice_request.attempts_used += 1
         advice_request.status = AdviceRequest.Status.PROCESSING
         advice_request.claimed_at = now
+        advice_request.claimed_by = request.worker
+        advice_request.claim_token = uuid.uuid4()
+        advice_request.lease_expires_at = _lease_deadline()
         advice_request.save(
-            update_fields=["status", "attempts_used", "claimed_at", "updated_at"]
+            update_fields=[
+                "status",
+                "attempts_used",
+                "claimed_at",
+                "claimed_by",
+                "claim_token",
+                "lease_expires_at",
+                "updated_at",
+            ]
         )
         transaction_row = advice_request.transaction
 
     return JsonResponse(
         {
             "request": advice_request.pk,
+            "claim_token": str(advice_request.claim_token),
+            "lease_expires_at": advice_request.lease_expires_at.isoformat(),
             "attempts_remaining": max(
                 0, settings.WORKER_MAX_ATTEMPTS - advice_request.attempts_used
             ),
@@ -455,11 +479,40 @@ def claim_advice(request):
     )
 
 
+def _release_advice_claim(advice_request, *, failed=False, failure=""):
+    """Clear fencing fields and either retry or stop after the attempt budget."""
+    advice_request.claimed_at = None
+    advice_request.claimed_by = None
+    advice_request.claim_token = None
+    advice_request.lease_expires_at = None
+    if failed:
+        advice_request.last_failure = failure[:500]
+        if advice_request.attempts_used >= settings.WORKER_MAX_ATTEMPTS:
+            advice_request.status = AdviceRequest.Status.FAILED
+        else:
+            advice_request.status = AdviceRequest.Status.PENDING
+    advice_request.save(
+        update_fields=[
+            "status",
+            "last_failure",
+            "claimed_at",
+            "claimed_by",
+            "claim_token",
+            "lease_expires_at",
+            "updated_at",
+        ]
+    )
+
+
 @csrf_exempt
 @require_POST
 @worker_required
 def advice_result(request, pk):
-    """Accept validated advice, an abstention, or a bounded failure."""
+    """Accept validated advice, an abstention, or a bounded failure.
+
+    The claim is fenced by credential, unguessable token and lease: a worker
+    whose lease lapsed and was reclaimed cannot complete the newer claim.
+    """
     try:
         body = _json_body(request)
     except ApiError as exc:
@@ -467,52 +520,53 @@ def advice_result(request, pk):
     outcome = body.get("outcome")
     if outcome not in {"suggested", "abstained", "failed"}:
         return JsonResponse({"error": "unsupported advice outcome"}, status=400)
+    raw_token = body.get("claim_token")
+    try:
+        claim_token = uuid.UUID(str(raw_token))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "claim token is required"}, status=400)
 
     with transaction.atomic():
         advice_request = (
             AdviceRequest.objects.select_for_update()
             .select_related("transaction")
-            .filter(pk=pk)
+            .filter(
+                pk=pk,
+                status=AdviceRequest.Status.PROCESSING,
+                claim_token=claim_token,
+                claimed_by=request.worker,
+            )
             .first()
         )
         if advice_request is None:
-            return JsonResponse({"error": "advice request not found"}, status=404)
-        if advice_request.status != AdviceRequest.Status.PROCESSING:
-            return JsonResponse({"error": "advice request is not open"}, status=409)
+            return JsonResponse(
+                {"error": "advice claim does not match an open attempt"}, status=409
+            )
+        if (
+            advice_request.lease_expires_at is None
+            or advice_request.lease_expires_at < timezone.now()
+        ):
+            return JsonResponse({"error": "advice lease lost"}, status=409)
 
         if outcome == "failed":
-            failure = str(body.get("failure") or "Advice unavailable.")[:500]
-            advice_request.last_failure = failure
-            advice_request.claimed_at = None
-            if advice_request.attempts_used >= settings.WORKER_MAX_ATTEMPTS:
-                advice_request.status = AdviceRequest.Status.FAILED
-            else:
-                advice_request.status = AdviceRequest.Status.PENDING
-            advice_request.save(
-                update_fields=["status", "last_failure", "claimed_at", "updated_at"]
+            _release_advice_claim(
+                advice_request,
+                failed=True,
+                failure=str(body.get("failure") or "Advice unavailable."),
             )
             return JsonResponse({"status": advice_request.status})
 
         if outcome == "abstained":
             advice_request.status = AdviceRequest.Status.COMPLETED
-            advice_request.claimed_at = None
             advice_request.last_failure = ""
-            advice_request.save(
-                update_fields=["status", "claimed_at", "last_failure", "updated_at"]
-            )
+            _release_advice_claim(advice_request)
             return JsonResponse({"status": advice_request.status})
 
         try:
             fields = advisory_fields(body.get("suggestion"))
         except ValueError as exc:
-            advice_request.last_failure = f"Invalid advice: {exc}"[:500]
-            advice_request.claimed_at = None
-            if advice_request.attempts_used >= settings.WORKER_MAX_ATTEMPTS:
-                advice_request.status = AdviceRequest.Status.FAILED
-            else:
-                advice_request.status = AdviceRequest.Status.PENDING
-            advice_request.save(
-                update_fields=["status", "last_failure", "claimed_at", "updated_at"]
+            _release_advice_claim(
+                advice_request, failed=True, failure=f"Invalid advice: {exc}"
             )
             return JsonResponse({"error": str(exc)}, status=400)
 
@@ -520,9 +574,6 @@ def advice_result(request, pk):
             transaction=advice_request.transaction, **fields
         )
         advice_request.status = AdviceRequest.Status.COMPLETED
-        advice_request.claimed_at = None
         advice_request.last_failure = ""
-        advice_request.save(
-            update_fields=["status", "claimed_at", "last_failure", "updated_at"]
-        )
+        _release_advice_claim(advice_request)
     return JsonResponse({"status": advice_request.status})
