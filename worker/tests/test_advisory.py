@@ -164,6 +164,38 @@ class LocalInferenceClientTests(SimpleTestCase):
             with self.assertRaisesRegex(AdvisoryFormatError, "Malformed JSON"):
                 self.client.suggest_classification("SHOP", -100, "current")
 
+    def test_inference_client_requires_explicit_enablement(self):
+        import os
+        from unittest import mock
+
+        from worker.advisory import client_from_env
+
+        with mock.patch.dict(
+            os.environ,
+            {"INFERENCE_URL": "http://127.0.0.1:11435", "INFERENCE_ENABLED": ""},
+            clear=False,
+        ):
+            self.assertIsNone(client_from_env())
+
+        with mock.patch.dict(
+            os.environ,
+            {"INFERENCE_URL": "http://127.0.0.1:11435", "INFERENCE_ENABLED": "true"},
+            clear=False,
+        ):
+            client = client_from_env()
+            self.assertIsNotNone(client)
+            self.assertEqual(client.base_url, "http://127.0.0.1:11435")
+
+        # The explicit connectivity check may force a client while advice stays
+        # disabled for ordinary processing.
+        with mock.patch.dict(
+            os.environ,
+            {"INFERENCE_URL": "http://127.0.0.1:11435", "INFERENCE_ENABLED": "false"},
+            clear=False,
+        ):
+            self.assertIsNone(client_from_env())
+            self.assertIsNotNone(client_from_env(force=True))
+
     def test_http_error_status_is_unavailable(self):
         with self.mock_urlopen(b"{}", status=500):
             with self.assertRaisesRegex(AdvisoryUnavailableError, "HTTP error 500"):

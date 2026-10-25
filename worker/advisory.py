@@ -241,13 +241,25 @@ def _advise_with_retry(client, row, account_kind, max_attempts, retry_delay_seco
     return None
 
 
-def client_from_env() -> LocalInferenceClient | None:
-    """Build the inference client only when the deployment configured one."""
+def client_from_env(*, force: bool = False) -> LocalInferenceClient | None:
+    """Build the inference client only when explicitly enabled and configured.
+
+    A URL alone is a smoke/qualification setting, not permission to show advice
+    during ordinary use. `force` is used only by the explicit connectivity check.
+    """
     import os
     import math
 
     url = os.environ.get("INFERENCE_URL", "").strip()
     if not url:
+        return None
+    enabled = os.environ.get("INFERENCE_ENABLED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not enabled and not force:
         return None
     try:
         timeout = float(os.environ.get("INFERENCE_TIMEOUT_SECONDS", "10"))

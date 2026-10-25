@@ -43,6 +43,8 @@ services:
       # Optional local advice. Leaving INFERENCE_URL empty keeps advice disabled.
       INFERENCE_URL: ${INFERENCE_URL:-}
       INFERENCE_MODEL: ${INFERENCE_MODEL:-qwen2.5:7b-instruct}
+      # Advice stays off during ordinary use until task08 qualification passes.
+      INFERENCE_ENABLED: ${INFERENCE_ENABLED:-false}
       INFERENCE_TIMEOUT_SECONDS: ${INFERENCE_TIMEOUT_SECONDS:-10}
       INFERENCE_MAX_ATTEMPTS: ${INFERENCE_MAX_ATTEMPTS:-2}
       INFERENCE_RETRY_DELAY_SECONDS: ${INFERENCE_RETRY_DELAY_SECONDS:-2}

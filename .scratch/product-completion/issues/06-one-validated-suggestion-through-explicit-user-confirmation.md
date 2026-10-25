@@ -59,11 +59,14 @@ Verification:
 - Browser against isolated PostgreSQL: seeded open suggestion rendered with model,
   prompt version, confidence, explanation and effect wording; confirming created
   the correction, closed the suggestion and showed it in history;390px no overflow.
-- The delivered worker path was also exercised end-to-end against a **controlled
-  local adapter** (not a real model): review request → worker claim → validated
-  suggestion → explicit confirmation, with claim fencing. This is not evidence of
-  model quality or real-runtime interoperability; task05/08's user-run steps must
-  repeat it with the pinned candidate before advice is enabled.
+- The delivered worker path was exercised end-to-end against a controlled local
+  adapter (not a real model): review request → worker claim → validated
+  suggestion → explicit confirmation, with claim fencing. This is not model
+  quality or real-runtime interoperability; task05/08 must repeat it with the
+  pinned candidate before enablement.
+- No production suggestions enabled by URL alone: `client_from_env` requires
+  `INFERENCE_ENABLED=true`, so imports and review stay unadvised until task08
+  passes. `--check-inference` provides a fenced connectivity smoke.
 - Malformed advice, unknown classification, out-of-range confidence and unknown
   source rows produced no suggestion while the import still succeeded.
 - Actual model quality/fit is not claimed; enablement stays gated by task08.

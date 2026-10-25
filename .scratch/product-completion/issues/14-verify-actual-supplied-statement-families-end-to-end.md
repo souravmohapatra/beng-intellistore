@@ -44,7 +44,7 @@ Local evidence (synthetic fixtures with independently established expectations):
   duplicate/overlap decisions, repayments, transfers, cash withdrawals and refunds.
 - Revolut tests cover personal GBP only, excluded joint/non-GBP/crypto sections,
   savings mapping, missing savings coverage and partial-section publication.
-- Full suite:296 tests passing; no parser was modified in this backlog so far.
+- Full suite:313 tests passing; no parser was modified in this backlog so far.
 
 Remaining user-run steps: supply the four representative private originals and
 independently established expected results outside Git; run each family through

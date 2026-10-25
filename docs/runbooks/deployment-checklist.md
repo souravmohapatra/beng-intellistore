@@ -11,14 +11,16 @@ Follow `docs/runbooks/inference-runtime.md`:
 
 1. Confirm NVIDIA container GPU access and free disk.
 2. Start `compose.inference.yaml`, pull at most two candidates, record digests.
-3. Obtain one real structured response from the worker container.
-4. Request advice from a review item and confirm the suggestion appears end to
-   end; confirm it changes nothing until you accept it.
-5. Run `scripts/advice_benchmark.py` with at least 50 privately labelled cases;
+3. Obtain one real structured response from the worker container with
+   `--check-inference`, leaving `INFERENCE_ENABLED=false`.
+4. Run `scripts/advice_benchmark.py` with at least 50 privately labelled cases;
    require `meets_gates: true` and a 100-item warm run inside ten minutes.
    Record cold-load time and GPU memory.
-6. If no candidate passes, keep `INFERENCE_URL` empty; report the result for an
-   explicit scope decision.
+5. Only after that recorded pass, set `INFERENCE_ENABLED=true`, restart the
+   worker, request advice from a review item and confirm the suggestion appears
+   end to end and changes nothing until accepted.
+6. If no candidate passes, keep `INFERENCE_ENABLED=false`; report the result for
+   an explicit scope decision.
 
 ## 2. NAS backup and restore (tasks10/13)
 
@@ -75,7 +77,7 @@ load, dataset/browser/network/runtime. Never seed the live database.
 
 ## Local verification snapshot
 
-- `env POSTGRES_PORT=55487 .venv/bin/python manage.py test -v 0`:296 tests.
+- `env POSTGRES_PORT=55487 .venv/bin/python manage.py test -v 0`:313 tests.
 - Real isolated backup during concurrent writes; isolated restore verified through
   the application.
 - No live host, private originals or push touched. Local changes are committed

@@ -28,6 +28,11 @@ Qualify the model and gate enablement. Complete the end-to-end behavior below, r
 D1/D2: pinned candidates and independently approved evaluation labels; laptop benchmark approval.
 Read the [decision register](../spec.md#decision-register). A resolved decision does not authorize coding or live changes.
 
+Enablement is enforced in code: ordinary advice requires `INFERENCE_ENABLED=true`
+in addition to `INFERENCE_URL`. Keep it false until this task records a pass. The
+worker's `--check-inference` and `scripts/advice_benchmark.py` exercise the runtime
+without enabling production suggestions.
+
 ## Verification
 
 Held-out report with case counts, abstentions, per-class precision/coverage, rules baseline, timings and memory; label provenance kept private.
@@ -36,5 +41,14 @@ Follow [common completion rules](../spec.md#completion-rules): TDD for changed p
 
 ## Current evidence and completion
 
-Not accepted as complete. Historical references are evidence inputs, not closure of this task. No new implementation is authorized by publication.
-Record exercised commands/scenarios, results, review findings, remaining gates and explicit commit references before closure.
+Harness and gates are implemented; qualification requires private labels and the
+actual laptop.
+
+- Evaluation harness enforces the 50-case/90%/50% gates and reports per-class
+  failures, abstentions, baseline and timings; seeder/latency harnesses are
+  separate (task15).
+- Enablement defaults off and requires an explicit flag, so a configured URL does
+  not surface unqualified advice. Unit tests cover disabled/enabled/forced modes.
+- No candidate has been downloaded, run or evaluated; no quality claim is made.
+  Follow step5–6 of `docs/runbooks/inference-runtime.md` and record the report
+  before enabling.

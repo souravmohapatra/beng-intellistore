@@ -48,7 +48,11 @@ Local evidence:
 - Candidate shortlist from primary sources: `qwen2.5:7b-instruct` (Apache-2.0)
   and `phi3.5` (MIT). Neither is qualified or downloaded.
 - Operator runbook: `docs/runbooks/inference-runtime.md` (prerequisites, pull,
-  pin digests, structured smoke, enable, benchmark, rollback).
+  pin digests, structured smoke, disabled-by-default connectivity check,
+  qualification, enablement only after a recorded pass, rollback).
+- Ordinary advice is double-gated: `INFERENCE_URL` plus `INFERENCE_ENABLED=true`.
+  The connectivity check (`--check-inference`) can use the URL while ordinary
+  advice stays disabled.
 
 Required on the deployment laptop before this task can close (user-run, approval
 needed for any install/service change):

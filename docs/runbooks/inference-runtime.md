@@ -61,7 +61,7 @@ Expect an HTTP 200 with a `response` field containing valid JSON. A running
 container is not quality or fit evidence; record cold-load time and `nvidia-smi`
 memory during this call.
 
-## 4. Enable advice for the worker only
+## 4. Verify worker-container connectivity (advice still disabled)
 
 Edit the root-owned worker environment file (created by the setup wizard), not
 the checkout:
@@ -73,28 +73,33 @@ sudoedit /etc/beng-intellistore-worker/runtime.env
 ```
 INFERENCE_URL=http://127.0.0.1:11435
 INFERENCE_MODEL=qwen2.5:7b-instruct
+INFERENCE_ENABLED=false
 INFERENCE_TIMEOUT_SECONDS=10
 INFERENCE_MAX_ATTEMPTS=2
 INFERENCE_RETRY_DELAY_SECONDS=2
 ```
 
-The worker container uses host networking, so `127.0.0.1` reaches the service.
-Then restart only the worker:
+`INFERENCE_ENABLED=false` keeps suggestions off during ordinary processing: a URL
+alone is a qualification setting, not permission to show unqualified advice. The
+worker container uses host networking, so `127.0.0.1` reaches the service. Run the
+explicit connectivity check:
 
 ```bash
 sudo systemctl restart intellistore-worker.service
-sudo journalctl -u intellistore-worker.service -n 50 --no-pager
+sudo docker compose --env-file /dev/null   --project-directory "$INTELLISTORE_COMPOSE_DIR" \
+  -f "$INTELLISTORE_COMPOSE_DIR/compose.worker.yaml" \
+  run --rm worker --check-inference
 ```
 
-Imports work with `INFERENCE_URL` empty: the deterministic pipeline is unchanged
-and review is manual. With it set, the worker also drains explicit advice
-requests from Review; those runs never re-import the statement. A failed attempt
-is retried up to `INFERENCE_MAX_ATTEMPTS` and is visible on the review page.
+Expect JSON with a classification, model and prompt version. This request uses a
+synthetic description and does not touch financial records. Imports and manual
+review work throughout with advice disabled.
 
-## 5. Qualify the candidate before claiming advice is enabled
+## 5. Qualify the candidate before enabling ordinary advice
 
 Prepare at least 50 privately labelled ambiguous cases outside Git (see
-`scripts/advice_benchmark.py --help`). Keep labels independent of the model.
+`scripts/advice_benchmark.py --help`). Keep labels independent of the model. The
+benchmark talks to the runtime directly; ordinary advice stays disabled.
 
 ```bash
 python scripts/advice_benchmark.py \
@@ -106,13 +111,34 @@ python scripts/advice_benchmark.py \
 
 Accept a candidate only when the script reports `meets_gates: true`
 (≥90% correct among non-abstained suggestions, ≥50% coverage, ≥50 cases) and a
-100-item warm run finishes within ten minutes. Otherwise leave `INFERENCE_URL`
-empty and use manual review; report the result for an explicit scope decision.
+100-item warm run finishes within ten minutes. Otherwise keep
+`INFERENCE_ENABLED=false`, use manual review and report the result for an
+explicit scope decision.
 
-## 6. Rollback
+## 6. Enable ordinary advice only after a recorded pass
+
+Only after task08 is recorded as passed, set in the worker environment:
+
+```
+INFERENCE_ENABLED=true
+```
+
+Then restart only the worker and confirm a review item shows a source-linked
+suggestion that changes nothing until accepted:
 
 ```bash
-sudo sed -i 's/^INFERENCE_URL=.*/INFERENCE_URL=/' /etc/beng-intellistore-worker/runtime.env
+sudo systemctl restart intellistore-worker.service
+sudo journalctl -u intellistore-worker.service -n 50 --no-pager
+```
+
+A failed attempt is retried up to `INFERENCE_MAX_ATTEMPTS` and is visible on the
+review page. Advice never re-imports the statement.
+
+## 7. Rollback
+
+```bash
+sudo sed -i 's/^INFERENCE_ENABLED=.*/INFERENCE_ENABLED=false/' \
+  /etc/beng-intellistore-worker/runtime.env
 sudo systemctl restart intellistore-worker.service
 docker compose -f compose.inference.yaml stop
 ```
