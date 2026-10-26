@@ -235,6 +235,56 @@ def lloyds_credit_text(pages: list[list[str]] | None = None) -> str:
     return "\f".join("\n".join(page) for page in (pages or lloyds_credit_pages()))
 
 
+def lloyds_credit_observed_pages() -> list[list[str]]:
+    """Sanitized statement matching the supplied originals' surface layout.
+
+    Faithful to the observed extraction: the card column is the trailing
+    four-digit card number (absent on the payment row), debt anchors carry a
+    leading ``£`` and the ``CR`` marker is separated from the amount by spaces;
+    foreign-currency continuations carry a wider gap before the currency code.
+    All amounts, dates and merchants are fabricated; the expected totals are
+    derived independently in the tests.
+    """
+    return [
+        [
+            "Your credit card statement",
+            "05 August 2026",
+            "Lloyds Bank Cashback",
+            "Credit Card",
+            "Previous balance        £412.30",
+            "Payments received        £412.30 CR",
+            "To reach your account by 01 September 2026",
+            "Your new balance",
+            "617.45",
+        ],
+        [
+            "Cardholder                      MR TEST CARDHOLDER",
+            "Card Ending Date of transaction Date entered Description Amount £",
+            "BALANCE FROM PREVIOUS STATEMENT               412.30",
+            "30 JULY 30 JULY DIRECT DEBIT PAYMENT - THANK YOU       412.30 CR",
+            "4242 03 JULY 06 JULY COFFEE HOUSE GB        21.00",
+            "4242 06 JULY 07 JULY SUPERMARKET LONDON GB        53.25",
+            "4242 10 JULY 13 JULY CAFE STOCKHOLM SE        12.00",
+            "160.00  SEK @ 13.3333",
+            "4242 10 JULY 13 JULY NON-STERLING PURCHASE FEE         0.35",
+            "4242 20 JULY 22 JULY ELECTRONICS LONDON GB       530.85",
+        ],
+        [
+            "Card Ending Date of transaction Date entered Description Amount £",
+            "Breakdown of balance",
+            "New balance              £617.45",
+        ],
+    ]
+
+
+def lloyds_credit_observed_pdf() -> bytes:
+    return statement_pdf(lloyds_credit_observed_pages())
+
+
+def lloyds_credit_observed_text() -> str:
+    return "\f".join("\n".join(page) for page in lloyds_credit_observed_pages())
+
+
 def positioned_statement_pdf(pages: list[list[tuple[float, float, str]]]) -> bytes:
     """Render tokens at explicit (x, y) positions, one text object each."""
     page_count = len(pages)

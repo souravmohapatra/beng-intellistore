@@ -151,7 +151,9 @@ def effect_for_classification(classification: str, transaction: Transaction) -> 
     if classification == "income":
         return RowEffect(income_pence=amount)
     if classification == "refund":
-        return RowEffect(spending_pence=-amount)
+        return RowEffect(
+            spending_pence=amount if kind == AccountKind.CARD else -amount
+        )
     if classification == "transfer":
         return RowEffect()
     return None

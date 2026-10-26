@@ -1,12 +1,15 @@
 """Deterministic interpretation of the supported Lloyds Credit layout.
 
-Supported layout contract (from the supplied statement's observed structure and
+Supported layout contract (from the supplied statements' observed structure and
 synthetic fixtures): cover/table text identifying ``Lloyds Bank``, a credit card
 and a statement date; transaction lines of ``card · transaction date · date
-entered · description · amount[CR]`` where dates omit the year; foreign-currency
+entered · description · amount[CR]`` where the card column is the trailing card
+number (one to four digits, absent on payment rows) and the ``CR`` marker may be
+separated from the amount by spaces; dates omit the year; foreign-currency
 continuation lines are annotations, never extra billed rows; standalone
 ``NON-STERLING PURCHASE FEE`` rows are real fees; ``BALANCE FROM PREVIOUS
-STATEMENT``/``New balance``/``Payments received`` supply debt anchors.
+STATEMENT``/``New balance``/``Payments received`` supply debt anchors, and the
+anchor amounts may carry a leading ``£`` and a trailing ``CR``.
 
 Card amounts are debt movements: a purchase increases debt (positive), a CR
 credit reduces it (negative). Reporting uses the date entered; the transaction
@@ -24,17 +27,19 @@ SECTION_NAME = "lloyds_credit"
 ACCOUNT_KIND_HINT = "card"
 
 ROW_PATTERN = re.compile(
-    r"^(?:(?P<card>\d{1,2})\s+)?"
+    r"^(?:(?P<card>\d{1,4})\s+)?"
     r"(?P<transaction>\d{2} [A-Z]+)\s+"
     r"(?P<entered>\d{2} [A-Z]+)\s+"
     r"(?P<description>.+?)\s+"
-    r"(?P<amount>[\d,]+\.\d{2})(?P<cr>CR)?$"
+    r"(?P<amount>[\d,]+\.\d{2})\s*(?P<cr>CR)?$"
 )
-FX_CONTINUATION = re.compile(r"^[\d,]+\.\d{2}[A-Z]{3} @ [\d.]+$")
+FX_CONTINUATION = re.compile(r"^[\d,]+\.\d{2}\s*[A-Z]{3}\s+@\s+[\d.]+$")
 STATEMENT_DATE = re.compile(r"^(\d{2} [A-Z][a-z]+ \d{4})$")
-PREVIOUS_BALANCE = re.compile(r"^(?:BALANCE FROM PREVIOUS STATEMENT|Previous balance)\s+([\d,]+\.\d{2})$")
-NEW_BALANCE = re.compile(r"^New balance\s+([\d,]+\.\d{2})$")
-PAYMENTS_RECEIVED = re.compile(r"^Payments received\s+([\d,]+\.\d{2})$")
+PREVIOUS_BALANCE = re.compile(
+    r"^(?:BALANCE FROM PREVIOUS STATEMENT|Previous balance)\s+£?([\d,]+\.\d{2})$"
+)
+NEW_BALANCE = re.compile(r"^New balance\s+£?([\d,]+\.\d{2})$")
+PAYMENTS_RECEIVED = re.compile(r"^Payments received\s+£?([\d,]+\.\d{2})\s*(?:CR)?$")
 
 
 @dataclass(frozen=True)

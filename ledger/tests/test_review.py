@@ -134,6 +134,10 @@ class CorrectionTests(ReviewTestCase):
         )
         self.assertEqual(accepted.status_code, 302)
         self.assertEqual(Correction.objects.get().classification, "refund")
+        report = self.totals()
+        self.assertEqual(report.spending_pence, -700)
+        self.assertEqual(report.cash_outgoing_pence, 0)
+        self.assertEqual(report.income_pence, 250000)
 
     def test_transfer_correction_has_no_reporting_effect(self):
         self.correct("transfer")

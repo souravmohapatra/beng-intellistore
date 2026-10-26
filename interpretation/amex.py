@@ -25,6 +25,12 @@ STATEMENT_DATE_PATTERN = re.compile(r"\b(\d{2})\s*/\s*(\d{2})\s*/\s*(\d{2})\b")
 PREVIOUS_BALANCE = re.compile(r"^Previous Balance\b.*?([\d,]+\.\d{2})$")
 NEW_BALANCE = re.compile(r"^New Balance\b.*?([\d,]+\.\d{2})$")
 PAYMENTS_AND_CREDITS = re.compile(r"^Payments and Credits\b.*?([\d,]+\.\d{2})$")
+# Account-summary box: previous closing balance - new credits + new debits =
+# closing balance, beneath the corresponding four column headings.
+ACCOUNT_SUMMARY = re.compile(
+    r"^£?\s*(?P<previous>[\d,]+\.\d{2})\s*-\s*£?\s*(?P<credits>[\d,]+\.\d{2})"
+    r"\s*\+\s*£?\s*(?P<debits>[\d,]+\.\d{2})\s*=\s*£?\s*(?P<closing>[\d,]+\.\d{2})$"
+)
 SECTION_NAME = "amex"
 ACCOUNT_KIND_HINT = "card"
 
@@ -67,6 +73,7 @@ class ParseResult:
     closing_pence: int | None = None
     payments_and_credits_pence: int | None = None
     debits_pence: int | None = None
+    stated_debits_pence: int | None = None
 
     def __post_init__(self):
         self.rows = [] if self.rows is None else self.rows
@@ -165,6 +172,11 @@ def parse_pages(pages: list[list[tuple[float, float, str]]]) -> ParseResult:
                                 "The statement repeats a different payments-and-credits total.",
                             )
                         )
+                continue
+
+            summary = ACCOUNT_SUMMARY.match(line.text)
+            if summary:
+                _consume_summary(summary, statement_date, result)
                 continue
 
             row = ROW_PATTERN.match(line.text)
@@ -304,6 +316,64 @@ def _consume_row(row, credit: bool, page_number: int, statement_date, result: Pa
     )
 
 
+def _consume_summary(row, statement_date, result: ParseResult) -> None:
+    """Read the account-summary box's previous/credits/debits/closing figures.
+
+    The box states ``previous closing balance - new credits + new debits =
+    closing balance``; the credits and debits columns are the statement totals
+    the rows must independently reproduce.
+    """
+    previous = _maybe_pence(row.group("previous"))
+    if previous is not None:
+        if result.opening_pence is None:
+            result.opening_pence = previous
+            result.balances.append(BalanceAnchor("opening", previous, None))
+        elif result.opening_pence != previous:
+            result.issues.append(
+                Issue(
+                    "contradictory_balance_anchor",
+                    "The statement repeats a different previous balance.",
+                )
+            )
+
+    credits = _maybe_pence(row.group("credits"))
+    if credits is not None:
+        if result.payments_and_credits_pence is None:
+            result.payments_and_credits_pence = credits
+        elif result.payments_and_credits_pence != credits:
+            result.issues.append(
+                Issue(
+                    "contradictory_payment_summary",
+                    "The statement repeats a different payments-and-credits total.",
+                )
+            )
+
+    closing = _maybe_pence(row.group("closing"))
+    if closing is not None:
+        if result.closing_pence is None:
+            result.closing_pence = closing
+            result.balances.append(BalanceAnchor("closing", closing, statement_date))
+        elif result.closing_pence != closing:
+            result.issues.append(
+                Issue(
+                    "contradictory_balance_anchor",
+                    "The statement repeats a different new balance.",
+                )
+            )
+
+    debits = _maybe_pence(row.group("debits"))
+    if debits is not None:
+        if result.stated_debits_pence is None:
+            result.stated_debits_pence = debits
+        elif result.stated_debits_pence != debits:
+            result.issues.append(
+                Issue(
+                    "contradictory_debit_summary",
+                    "The statement repeats a different new-debits total.",
+                )
+            )
+
+
 ANNOTATION_PREFIXES = ("Exchange Rate", "Nonsterling", "+")
 
 
@@ -366,6 +436,15 @@ def _validate(result: ParseResult) -> None:
                 "totals_mismatch",
                 f"Stated payments and credits {result.payments_and_credits_pence} pence differ "
                 f"from rows {credits} pence.",
+            )
+        )
+
+    if result.stated_debits_pence is not None and result.stated_debits_pence != debits:
+        result.issues.append(
+            Issue(
+                "debit_totals_mismatch",
+                f"Stated new debits {result.stated_debits_pence} pence differ from rows "
+                f"{debits} pence.",
             )
         )
 

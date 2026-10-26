@@ -11,6 +11,8 @@ from jobs.models import WorkerCredential
 from ledger.models import Account, AccountKind, BalanceObservation, Transaction, Upload
 from ledger.tests.statement_fixtures import (
     extract_text,
+    lloyds_credit_observed_pdf,
+    lloyds_credit_observed_text,
     lloyds_credit_pdf,
     lloyds_credit_text,
     lloyds_credit_year_boundary_pages,
@@ -156,6 +158,40 @@ class CreditParsingTests(TestCase):
 
         self.assertEqual(len(from_pdf.rows), 7)
         self.assertTrue(from_pdf.reconciled)
+
+    def test_observed_surface_layout_reconciles_with_four_digit_card_and_anchors(self):
+        result = parse(lloyds_credit_observed_text())
+
+        self.assertTrue(result.recognised)
+        self.assertTrue(result.reconciled, [issue.message for issue in result.issues])
+        self.assertEqual(
+            [
+                (row.posted_on, row.transaction_date, row.description, row.amount_pence)
+                for row in result.rows
+            ],
+            [
+                (
+                    date(2026, 7, 30),
+                    date(2026, 7, 30),
+                    "DIRECT DEBIT PAYMENT - THANK YOU",
+                    -41230,
+                ),
+                (date(2026, 7, 6), date(2026, 7, 3), "COFFEE HOUSE GB", 2100),
+                (date(2026, 7, 7), date(2026, 7, 6), "SUPERMARKET LONDON GB", 5325),
+                (date(2026, 7, 13), date(2026, 7, 10), "CAFE STOCKHOLM SE", 1200),
+                (date(2026, 7, 13), date(2026, 7, 10), "NON-STERLING PURCHASE FEE", 35),
+                (date(2026, 7, 22), date(2026, 7, 20), "ELECTRONICS LONDON GB", 53085),
+            ],
+        )
+        self.assertEqual((result.opening_pence, result.closing_pence), (41230, 61745))
+        self.assertEqual((result.payments_received_pence, result.debits_pence), (41230, 61745))
+        self.assertNotIn("SEK", [row.description for row in result.rows])
+
+    def test_observed_layout_pdf_extraction_reaches_the_same_rows(self):
+        from_pdf = parse(extract_text(lloyds_credit_observed_pdf()))
+
+        self.assertEqual(len(from_pdf.rows), 6)
+        self.assertTrue(from_pdf.reconciled, [issue.message for issue in from_pdf.issues])
 
 
 class CreditPublicationTests(UploadSetupMixin, TestCase):

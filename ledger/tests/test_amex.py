@@ -9,9 +9,80 @@ from django.urls import reverse
 from interpretation.amex import parse_pages
 from jobs.models import WorkerCredential
 from ledger.models import Account, AccountKind, Transaction, Upload
-from ledger.tests.statement_fixtures import amex_pages, amex_pdf, extract_positioned_token_pages
+from ledger.tests.statement_fixtures import (
+    amex_pages,
+    amex_pdf,
+    extract_positioned_token_pages,
+    positioned_statement_pdf,
+)
 from ledger.tests.support import UploadSetupMixin
 from worker.client import build_result
+
+
+def amex_summary_pages() -> list[list[tuple[float, float, str]]]:
+    """Sanitized Amex statement in the account-summary-box layout.
+
+    The cover reads the whole box across one arithmetic line: previous closing
+    balance - new credits + new debits = closing balance. Transaction rows keep
+    the two-date, process-date-reported shape; the annual page must be ignored.
+    Amounts are synthetic and internally consistent: 500.00 - 200.00 + 350.00 =
+    650.00, with the 350.00 of debits split across two rows and the 200.00
+    credit on a repayment row marked ``CR``.
+    """
+    cover = [
+        (14.4, 749.3, "Statement of Account Page 1 of 2"),
+        (14.4, 695.8, "Prepared for Membership Number Date"),
+        (14.4, 685.0, "TEST CARDHOLDER xxxx-xxxxxx-99999 10 / 09 / 26"),
+        (65.3, 642.0, "Previous Closing Balance"),
+        (197.0, 642.0, "New Credits"),
+        (295.4, 642.0, "New Debits"),
+        (379.0, 642.0, "Closing Balance"),
+        (97.4, 623.8, "£"),
+        (103.4, 623.8, "500.00"),
+        (143.3, 623.8, "-"),
+        (193.4, 623.8, "£"),
+        (199.4, 623.8, "200.00"),
+        (235.2, 623.8, "+"),
+        (288.0, 623.8, "£"),
+        (294.0, 623.8, "350.00"),
+        (333.4, 623.8, "="),
+        (382.3, 623.8, "£"),
+        (388.3, 623.8, "650.00"),
+    ]
+
+    def row(y: float, day: str, description: str, amount: str, credit: bool = False):
+        tokens = [
+            (14.4, y, "Aug"),
+            (32.6, y, day),
+            (57.6, y, "Aug"),
+            (75.8, y, day),
+            (100.8, y, description),
+            (504.2, y - 0.7, amount),
+        ]
+        if credit:
+            tokens.append((518.9, y - 13.0, "CR"))
+        return tokens
+
+    table = [
+        (14.4, 529.2, "Transaction"),
+        (57.6, 529.2, "Process"),
+        (14.4, 521.3, "Date"),
+        (57.6, 521.3, "Date"),
+        (100.8, 521.3, "Transaction Details"),
+        (504.2, 519.6, "Amount £"),
+    ]
+    table += row(502.6, "22", "PAYMENT RECEIVED - THANK YOU", "200.00", credit=True)
+    table += row(471.1, "11", "SHOP ONE LONDON", "150.00")
+    table += row(451.9, "15", "CAFE TWO LONDON", "200.00")
+
+    annual = [
+        (14.4, 792.7, "Annual Credit Card Statement"),
+        (14.4, 611.5, "For the period: 20 August 2025 to 10 September 2026"),
+        (36.0, 566.9, "Total Spending £ 999.00"),
+        (36.0, 534.5, "Total Amount Repaid (1) £ 300.00 CR"),
+        (36.0, 475.7, "Purchases Transactions (2) £ 999.00"),
+    ]
+    return [cover, table, annual]
 
 
 class AmexParsingTests(TestCase):
@@ -128,6 +199,100 @@ class AmexParsingTests(TestCase):
         self.assertTrue(from_pdf.reconciled)
         self.assertEqual(len(from_pdf.rows), 5)
         self.assertEqual(from_pdf.rows[-1].posted_on, date(2026, 8, 28))
+
+    def test_account_summary_box_supplies_balances_and_credit_total(self):
+        result = parse_pages(amex_summary_pages())
+
+        self.assertTrue(result.reconciled, [issue.message for issue in result.issues])
+        self.assertEqual(
+            (
+                result.opening_pence,
+                result.closing_pence,
+                result.payments_and_credits_pence,
+                result.debits_pence,
+                result.stated_debits_pence,
+            ),
+            (50000, 65000, 20000, 35000, 35000),
+        )
+
+    def test_account_summary_rows_keep_dates_signs_and_amounts(self):
+        result = parse_pages(amex_summary_pages())
+
+        self.assertEqual(len(result.rows), 3)
+        self.assertEqual(
+            [(row.posted_on, row.amount_pence) for row in result.rows],
+            [
+                (date(2026, 8, 22), -20000),
+                (date(2026, 8, 11), 15000),
+                (date(2026, 8, 15), 20000),
+            ],
+        )
+
+    def test_annual_summary_page_in_summary_layout_is_excluded(self):
+        result = parse_pages(amex_summary_pages())
+
+        descriptions = [row.description for row in result.rows]
+        self.assertNotIn("Total Amount Repaid (1) £ 300.00 CR", descriptions)
+        self.assertEqual(len(result.rows), 3)
+        self.assertEqual([anchor.kind for anchor in result.balances], ["opening", "closing"])
+
+    def test_missing_account_summary_still_reports_missing_anchors(self):
+        pages = amex_summary_pages()
+        pages[0] = [token for token in pages[0] if token[1] != 623.8]
+
+        result = parse_pages(pages)
+
+        self.assertFalse(result.reconciled)
+        codes = {issue.code for issue in result.issues}
+        self.assertIn("missing_opening_balance", codes)
+        self.assertIn("missing_closing_balance", codes)
+        self.assertIn("missing_payments_summary", codes)
+
+    def test_summary_box_debit_total_must_match_the_transaction_rows(self):
+        pages = amex_summary_pages()
+        pages[0] = [
+            (x, y, "351.00") if (x, y, text) == (294.0, 623.8, "350.00") else (x, y, text)
+            for x, y, text in pages[0]
+        ]
+
+        result = parse_pages(pages)
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("debit_totals_mismatch", [issue.code for issue in result.issues])
+        self.assertEqual(result.stated_debits_pence, 35100)
+        self.assertEqual(result.debits_pence, 35000)
+
+    def test_a_repeated_different_summary_debit_total_is_contradictory(self):
+        pages = amex_summary_pages()
+        pages[0] += [
+            (97.4, 600.0, "£"),
+            (103.4, 600.0, "500.00"),
+            (143.3, 600.0, "-"),
+            (193.4, 600.0, "£"),
+            (199.4, 600.0, "200.00"),
+            (235.2, 600.0, "+"),
+            (288.0, 600.0, "£"),
+            (294.0, 600.0, "350.01"),
+            (333.4, 600.0, "="),
+            (382.3, 600.0, "£"),
+            (388.3, 600.0, "650.00"),
+        ]
+
+        result = parse_pages(pages)
+
+        self.assertFalse(result.reconciled)
+        self.assertIn("contradictory_debit_summary", [issue.code for issue in result.issues])
+
+    def test_summary_layout_pdf_tokens_reconstruct_the_same_result(self):
+        from_pdf = parse_pages(
+            extract_positioned_token_pages(positioned_statement_pdf(amex_summary_pages()))
+        )
+
+        self.assertTrue(from_pdf.reconciled, [issue.message for issue in from_pdf.issues])
+        self.assertEqual(len(from_pdf.rows), 3)
+        self.assertEqual(
+            (from_pdf.opening_pence, from_pdf.closing_pence), (50000, 65000)
+        )
 
 
 class AmexPublicationTests(UploadSetupMixin, TestCase):
