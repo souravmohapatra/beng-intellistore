@@ -130,6 +130,8 @@ _apply_storage() {
     || setup_die "Could not create or fix the storage directory $base."
   install -d -m 0700 -o "$APP_UID" -g "$APP_GID" "$data" \
     || setup_die "Could not create or fix the originals directory $data."
+  install -d -m 0700 -o "$APP_UID" -g "$APP_GID" "$data/status" \
+    || setup_die "Could not create or fix the backup status directory $data/status."
   if [[ ! -d $dbdir ]]; then
     install -d -m 0700 -o root -g root "$dbdir" \
       || setup_die "Could not create the database directory $dbdir."
@@ -298,6 +300,7 @@ run_wizard() {
   say 'Planned permissions (these paths only; nothing recursive):'
   note "  $base   owner $APP_UID:$APP_GID, mode 0750  — deployment root"
   note "  $data   owner $APP_UID:$APP_GID, mode 0700  — uploads and originals"
+  note "  $data/status   owner $APP_UID:$APP_GID, mode 0700  — backup outcomes"
   note "  $dbdir  owner root:root, mode 0700  — PostgreSQL data, handed to the database container"
   say ''
   confirm 'Apply these storage permissions?' || setup_die 'Declined; no storage change was made.'

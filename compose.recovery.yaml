@@ -1,7 +1,10 @@
 # Recovery services layered over compose.production.yaml.
 #
 # Kept separate so ordinary app/worker startup never requires NAS or restore
-# settings. Invoke explicitly:
+# settings. The `backup` service needs only the destination/status settings; the
+# `restore` service additionally needs an isolated restore directory. That
+# restore-only setting has a harmless default so `run backup` never fails Compose
+# interpolation for a variable it does not use. Invoke explicitly:
 #   docker compose -f compose.production.yaml -f compose.recovery.yaml run --rm backup
 #   docker compose -f compose.production.yaml -f compose.recovery.yaml run --rm restore ...
 name: beng-intellistore-production
@@ -44,12 +47,12 @@ services:
         source: ${INTELLISTORE_HOST_DATA_DIR:?Set INTELLISTORE_HOST_DATA_DIR to an existing local directory}/status
         target: /status
         bind:
-          create_host_path: true
+          create_host_path: false
       - type: bind
         source: ${INTELLISTORE_BACKUP_DIR:?Set INTELLISTORE_BACKUP_DIR to the NAS backup directory}
         target: /backup
         bind:
-          create_host_path: true
+          create_host_path: false
       - type: bind
         source: ${INTELLISTORE_COMPOSE_DIR:?Set INTELLISTORE_COMPOSE_DIR}/scripts
         target: /scripts
@@ -91,10 +94,10 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ${INTELLISTORE_RESTORE_DIR:?Set INTELLISTORE_RESTORE_DIR to an isolated restore directory}
+        source: ${INTELLISTORE_RESTORE_DIR:-/var/lib/beng-intellistore/restore-check}
         target: /restore
         bind:
-          create_host_path: true
+          create_host_path: false
       - type: bind
         source: ${INTELLISTORE_COMPOSE_DIR:?Set INTELLISTORE_COMPOSE_DIR}/scripts
         target: /scripts

@@ -47,19 +47,23 @@ Implementation:
   public-surface checks for originals, reports, mappings and corrections.
 
 Verification (controlled client binaries, real filesystem):
-- `jobs.tests.test_backup_scripts` (8 restore tests): restores verified originals
-  into an empty target; refuses the live database; rejects an incomplete
-  generation; rejects empty/truncated manifests, unsafe paths, duplicate/omitted
-  originals and tampered payloads before any psql/pg_restore call.
+- `jobs.tests.test_backup_scripts` includes18restore regressions: verified
+  payloads restore into an empty target; malformed/empty/unsafe/omitted manifests,
+  symlinks, injected find/hash failures, invalid DB identifiers and live/non-empty
+  targets are rejected before database writes.
 - Real isolated proof: restored a real generation (taken during concurrent
   correction writes) into `intellistore_restore_check3`. The restored database
   held 20 transactions, 184 of 222 corrections (a valid mid-write snapshot), 2
   originals and 2 accounts; both originals matched the manifest hashes. The
   application-level one-active-correction invariant is proven separately in
   `test_review_concurrency`; the direct-SQL writer used for load does not enforce
-  it. A temporary app on
-  port8030 pointed at the restored database/originals served overview, search,
-  account, review and the original (`200`, `application/pdf`, exact bytes).
+  it. That earlier snapshot was verified by database/hash checks; it was not the
+  database used by the earlier port8030 application proof.
+- Latest proof: `review_data_restore` restored20transactions,222corrections and
+ 2originals. A temporary app on8030 served dashboard, search and correction
+  history; the observed original link returned200/application-pdf/3073bytes with
+  SHA-256 matching the generation manifest. The final retention implementation
+  was additionally exercised by another successful container backup/restore.
 - A deliberately tampered generation is rejected before any write by the same
   manifest check proven in the tests.
 

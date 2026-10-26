@@ -56,11 +56,10 @@ Implementation:
   least privilege. Nothing is deployed.
 
 Verification:
-- `jobs.tests.test_backup_scripts`: 14 passing tests cover manifest publication,
-  empty/fresh originals, missing originals parent, unreadable payloads, failed dump,
-  seven-generation retention, failure never retiring a good generation, and
-  separate last-attempt/last-success status (a failure cannot erase the last
-  success).
+- `jobs.tests.test_backup_scripts`:35passing command-boundary regressions cover
+  manifest publication, fresh/empty originals, identifier/symlink rejection,
+  enumeration/hash failures, retention, publication-order ties, exclusive locks
+  and separate last-attempt/last-success status.
 - Real isolated proof (Docker Desktop, project `intellistore-ui-check`, PostgreSQL
   17.11 on port55487): ran the actual `postgres:17.11-alpine` backup container
   against the live isolated database while a writer committed corrections every
@@ -80,6 +79,12 @@ Verification:
   `data/status/backup.json` and `backup-last-success.json`; the matching `restore`
   service created and restored `smoke_restore` with exit0. The script mount is
   `${INTELLISTORE_COMPOSE_DIR}/scripts`, verified inside the service.
+- Latest container proof:20transactions,222corrections and2originals backed up
+  and restored. A read-only destination returned exit1 and wrote failed attempt
+  status while preserving last success and the complete generation. Backup locks
+  release on exit; stale locks are never stolen by an arbitrary timeout.
+- Setup now pre-creates app-owned `data/status`; Docker bind auto-creation is
+  disabled. Follow the runbook for already-installed deployments.
 
 Remaining user-run steps (see `docs/runbooks/backup-restore.md`): set the approved
 NAS path/status dir, confirm writable uid/headroom, install the timer, run one
