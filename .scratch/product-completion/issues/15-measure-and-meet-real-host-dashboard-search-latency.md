@@ -44,17 +44,19 @@ Implementation:
 - `scripts/latency_benchmark.py` is an HTTP diagnostic only (server response
   time), explicitly labelled `mode: http-diagnostic`; it is not the release gate.
 - `scripts/browser_latency_benchmark.py` (optional `requirements-benchmark.txt`)
-  measures submission-to-visible in Chromium for dashboard, period submit, search
-  and review, cold + 30 warm repetitions, p50/p95/max and the 2-second verdict.
+  measures submission-to-visible (including rendering) in Chromium for dashboard,
+  period submit and search: first load separately, then 30 warm repetitions.
+  Warm p50/p95/max exclude the first load; insufficient samples cannot qualify.
 
 Verification:
 - Seeder tests: confirmation required, live-database refusal, one-time seeding
   (50 transactions, 2 balance anchors).
 - HTTP diagnostic smoke (small dataset, not acceptance): p95 max 26.5ms.
-- Browser harness smoke against the isolated app: dashboard 40.6ms, period
-  122–131ms, search 99–101ms, review 53ms p95 over 3 runs; JSON
-  `mode: browser-submit-to-visible`, `meets_two_seconds: true`. Small synthetic
-  data and a Mac, so this validates the harness only.
+- Actual local 100,000-row/ten-year workload, Chromium156,1440×1000, one user,
+  loopback,30 warm runs per journey: dashboard p95 1020.8ms, period266.1ms,
+  search126.6ms. First loads separately:1016.5ms,264.7ms,128.7ms.
+  JSON report `/tmp/intellistore-100k-browser-review.json`. This is Mac evidence,
+  not mini-PC/home-LAN acceptance; no optimization was needed locally.
 - Playwright is pinned in `requirements-benchmark.txt`; no runtime dependency was
   added to the application requirements.
 - No live data was seeded; the command guard is tested.

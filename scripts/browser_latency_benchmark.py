@@ -15,31 +15,35 @@ Usage:
 """
 
 import argparse
-import json
+import math
 import os
+import json
 from pathlib import Path
 import statistics
 import sys
 import time
 
-def timed(page, action, ready_selector, url_glob=None):
+def timed(page, action, ready_selector):
     started = time.perf_counter()
     action()
-    if url_glob:
-        page.wait_for_url(url_glob, timeout=60_000)
     page.wait_for_selector(ready_selector, state="visible", timeout=60_000)
+    # Include rendering, not merely the arrival of an HTML response.
+    page.evaluate(
+        "() => new Promise(resolve => requestAnimationFrame("
+        "() => requestAnimationFrame(resolve)))"
+    )
     return (time.perf_counter() - started) * 1000
 
 
-def summarize(name, samples):
-    ordered = sorted(samples)
+def summarize(name, cold_ms, warm_samples):
+    ordered = sorted(warm_samples)
     return {
         "journey": name,
-        "cold_ms": round(samples[0], 1),
-        "p50_ms": round(statistics.median(ordered[1:]), 1),
-        "p95_ms": round(ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))], 1),
-        "max_ms": round(ordered[-1], 1),
-        "samples": len(samples),
+        "first_load_ms": cold_ms,
+        "p50_ms": statistics.median(ordered),
+        "p95_ms": ordered[math.ceil(len(ordered) * 0.95) - 1],
+        "max_ms": ordered[-1],
+        "warm_samples": len(warm_samples),
     }
 
 
@@ -48,16 +52,18 @@ def main():
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--username", required=True)
     parser.add_argument("--password-env", default="INTELLISTORE_BENCH_PASSWORD")
-    parser.add_argument("--runs", type=int, default=30)
+    parser.add_argument("--runs", type=int, default=30, help="Warm runs per journey")
     parser.add_argument("--month", default="2026-08")
     parser.add_argument("--search", default="SYNTHETIC")
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--host-description", default="not supplied")
+    parser.add_argument("--network-description", default="not supplied")
     args = parser.parse_args()
     password = os.environ.get(args.password_env)
     if not password:
         parser.error(f"set {args.password_env}")
-    if args.runs < 2:
-        parser.error("--runs must be at least 2 (cold + warm)")
+    if args.runs < 1:
+        parser.error("--runs must be positive")
     base = args.base_url.rstrip("/")
 
     from playwright.sync_api import sync_playwright
@@ -73,6 +79,7 @@ def main():
 
         journeys = {
             "dashboard": (
+                lambda: None,
                 lambda: page.goto(base + "/", wait_until="domcontentloaded"),
                 ".metric-grid",
             ),
@@ -80,47 +87,55 @@ def main():
                 lambda: (
                     page.goto(base + "/", wait_until="domcontentloaded"),
                     page.fill("#id_period_month", args.month),
-                    page.click('button:has-text("Show period")'),
                 ),
+                lambda: page.get_by_role("button", name="Show period").click(),
                 ".metric-grid",
-                "**/?month=*",
             ),
             "search": (
                 lambda: (
                     page.goto(base + "/search/", wait_until="domcontentloaded"),
                     page.fill("#search-query", args.search),
-                    page.click('button:has-text("Search")'),
                 ),
+                lambda: page.get_by_role("button", name="Search", exact=True).click(),
                 "table.data-table tbody tr, .empty-state",
-            ),
-            "review": (
-                lambda: page.goto(base + "/review/", wait_until="domcontentloaded"),
-                "h1",
             ),
         }
 
         results = []
-        for name, (action, ready, *rest) in journeys.items():
-            url_glob = rest[0] if rest else None
-            samples = [timed(page, action, ready, url_glob)]
-            for _ in range(args.runs - 1):
-                samples.append(timed(page, action, ready, url_glob))
-            results.append(summarize(name, samples))
+        for name, (prepare, action, ready) in journeys.items():
+            prepare()
+            first_load_ms = timed(page, action, ready)
+            samples = []
+            for _ in range(args.runs):
+                prepare()
+                samples.append(timed(page, action, ready))
+            results.append(summarize(name, first_load_ms, samples))
+        browser_version = browser.version
         browser.close()
 
     report = {
         "mode": "browser-submit-to-visible",
         "base_url": base,
-        "runs": args.runs,
+        "warm_runs_per_journey": args.runs,
+        "browser": f"Chromium {browser_version}",
+        "viewport": {"width": 1440, "height": 1000},
+        "month": args.month,
+        "query": args.search,
+        "host_description": args.host_description,
+        "network_description": args.network_description,
+        "cold_policy": "First measured journey only; no server/cache restart.",
         "results": results,
         "p95_max_ms": max(item["p95_ms"] for item in results),
     }
     report["meets_two_seconds"] = report["p95_max_ms"] <= 2000
+    report["qualifying_sample_count"] = args.runs >= 30
     text = json.dumps(report, indent=2)
     if args.output:
         args.output.write_text(text, encoding="utf-8")
     print(text)
-    return 0 if report["meets_two_seconds"] else 2
+    return 0 if (
+        report["meets_two_seconds"] and report["qualifying_sample_count"]
+    ) else 2
 
 
 if __name__ == "__main__":

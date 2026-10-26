@@ -11,10 +11,10 @@ deployment; **user** = requires Sourav's private files, device or decision.
 | AC | Disposition | Evidence / remaining gate |
 | --- | --- | --- |
 | AC-01 | local pass; host open | Authenticated routing, worker bearer scoping and unauthenticated redirects tested; deployed LAN login is a task11/16 host check. |
-| AC-02 | local pass; user open | Account onboarding, selection recall, mismatch warnings and Revolut two-account mapping tested; actual private originals in task14. |
+| AC-02 | local pass; host open | Onboarding/mapping/mismatch tests pass; all four supplied originals uploaded with named-account assignments in the isolated local UI. |
 | AC-03 | local pass | Rejection, unsupported preservation and clear messages tested in intake suites. |
 | AC-04 | local pass | Receipt survives restart tests; storage/receipt failures report 503 without success. |
-| AC-05 | local synthetic pass; user open | Exact dates/signs/amounts/balances asserted per family; private expected results are task14. |
+| AC-05 | local source proof; full oracle open | All four supplied PDFs import and reconcile; Current17/Credit78/Amex13/Revolut10 match prior source inventory. Independently established full-field and edge-case acceptance remains Task14. |
 | AC-06 | local pass | Lost-ack replay, conflicting payload rejection and duplicate suppression tested. |
 | AC-07 | local pass | Overlap candidates retain both rows; confirmed duplicates suppress one effect only. |
 | AC-08 | local pass | Transfer/repayment link tests retain both entries with agreed effects. |
@@ -36,7 +36,29 @@ deployment; **user** = requires Sourav's private files, device or decision.
 | AC-24 | local pass | History older than twelve months remains queryable; no purge/archival path exists. |
 | AC-25 | local pass; real runtime open | Advice is validated, source-linked and confirmation-only; unavailable runtime leaves imports/review usable. The real-model demonstration and enablement gate remain task05/06/08. |
 | AC-26 | harness ready; user open | Evaluation harness and gates implemented; private labels and actual-laptop run remain task08. |
-| AC-27 | browser harness ready; user open | HTTP diagnostic and browser submit-to-visible harnesses implemented; actual mini-PC 100k measurement remains task15. |
+| AC-27 | local100k pass; host open | Chromium30-warm p95: dashboard1020.8ms, period266.1ms, search126.6ms on the Mac/loopback. Actual mini-PC/LAN qualification remains Task15. |
+
+## Latest integrated local verification —2026-10-26
+
+- `./scripts/smoke.sh`:377tests pass, Django check/no migration drift, fresh
+  PostgreSQL migrations, restart proof and owned scratch cleanup pass.
+- Supplied originals exercised through browser intake→real worker API→
+  dashboard/drilldown/search/review; all four original downloads are byte-exact.
+  Amex summary-box and Lloyds Credit source-layout defects fixed with sanitized
+  tests. No private source contents or monetary values committed.
+- Real backup/isolated restore retained20transactions,222corrections and
+ 2originals; restored app source bytes matched its manifest. A read-only
+  destination produced a failed attempt without erasing last success.
+- Independent financial/advisory and recovery/measurement reviewers checked
+  changes and their revisions; no remaining findings in the reviewed slices.
+- SSH inventory only: mini-PC revision`079e96d`, app/release timer active, backup
+  timer inactive; laptop worker active, inference port11435 not listening.
+  Mini-PC non-interactive sudo requires a password. No target mutation, model
+  download, power exercise or push performed.
+- Verified local commits: `4dcde91` (supplied formats/refunds), `42eff66`
+  (advisory qualification/review/status), `44a8c5d` (recovery/setup safety).
+  After the full smoke, fixture identifiers/comments were sanitized before
+  committing; the focused Amex/Lloyds Credit 36-test run also passes.
 
 ## Operating handoff
 

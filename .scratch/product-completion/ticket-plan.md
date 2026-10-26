@@ -4,7 +4,7 @@ Authority: ACTIVE — sole implementation direction.
 Approval: Sourav approved the seventeen-task division and this authoritative cutover.
 Execution: AUTHORIZED by Sourav: “Start implementation from .scratch/product-completion/ticket-plan.md”. Work the eligible frontier; unresolved decisions and separate live-operation/push approvals remain gates.
 
-Read [the completion specification](spec.md) for scope, decisions and completion rules. Authorization above supersedes publication-time PAUSED text in individual tasks without resolving their design/input gates. Tasks01/02 are done locally; task03 is claimed by Codex.
+Read [the completion specification](spec.md) for scope, decisions and completion rules. Authorization above supersedes publication-time PAUSED text without resolving design/input gates. Current local/host evidence is in [the release ledger](release-ledger.md); the table below distinguishes implemented work from outstanding acceptance.
 
 ## Active tasks
 
@@ -25,8 +25,8 @@ Published IDs are dependency-ordered. Draft T12 becomes10, T10 becomes11, T11 be
 | [11 — Qualify real-host scheduling, wake and keep-awake lifecycle](issues/11-qualify-real-host-scheduling-wake-and-keep-awake-lifecycle.md) | T10 | 09, 08 | needs-info |
 | [12 — Actionable operational status without private logging](issues/12-actionable-operational-status-without-private-logging.md) | T11 | 04, 07, 09, 10 | done locally |
 | [13 — Restore and verify a recovery generation in isolation](issues/13-restore-and-verify-a-recovery-generation-in-isolation.md) | T13 | 10 | local proof done; needs NAS run |
-| [14 — Verify actual supplied statement families end to end](issues/14-verify-actual-supplied-statement-families-end-to-end.md) | T14 | 09 | synthetic pass; needs private sources |
-| [15 — Measure and meet real-host dashboard/search latency](issues/15-measure-and-meet-real-host-dashboard-search-latency.md) | T15 | 02 | harness ready; needs mini-PC run |
+| [14 — Verify actual supplied statement families end to end](issues/14-verify-actual-supplied-statement-families-end-to-end.md) | T14 | 09 | four originals import locally; full oracle/edge acceptance open |
+| [15 — Measure and meet real-host dashboard/search latency](issues/15-measure-and-meet-real-host-dashboard-search-latency.md) | T15 | 02 | local100k/30-warm pass; needs mini-PC run |
 | [16 — Accept complete desktop, keyboard and actual-phone journeys](issues/16-accept-complete-desktop-keyboard-and-actual-phone-journeys.md) | T16 | 01, 02, 03, 04, 07, 08, 12 | local audit pass; needs phone/deployment |
 | [17 — Integrated release qualification and operating handoff](issues/17-integrated-release-qualification-and-operating-handoff.md) | T17 | 11, 13, 14, 15, 16 | ledger drafted; host gates open |
 
@@ -114,6 +114,12 @@ All thirty initial-release implementation tickets are retired from execution, wi
 
 The old [ticket plan](../initial-release/ticket-plan.md) and [completion proposal](../initial-release/completion-plan.md) are retired. The original requirements, HLD, glossary and accepted ADRs are retained, not deprecated as completed tasks. The design decision map remains historical design rationale, not an implementation queue.
 
-## Next planning action
+## Current execution frontier
 
-Resolve D1–D3 using available repository/authorized host evidence and focused user tradeoff decisions; collect D4 external acceptance prerequisites before the relevant live work. Eligible implementation may now proceed under Sourav's explicit instruction; unresolved decisions remain gates.
+Local source fixes, advice/recovery hardening and100k browser measurement are
+verified. Continue with the actual-laptop model qualification, NAS recovery,
+host lifecycle, private full-field oracle and actual-phone acceptance gates.
+Read-only host inspection found the mini-PC still on revision`079e96d`, a live
+worker but no isolated inference listener on11435, and no installed backup timer.
+SSH works; non-interactive sudo on the mini-PC requires a password. Deployment,
+live-data migrations, power/fault exercises and pushing remain separately gated.

@@ -48,4 +48,8 @@ These gates are not a second implementation backlog. Resolve them and record the
 
 Historical implementation: initial-release01–05,07–17 and20 record completed local behavior. Other historical tickets include partial implementation or unresolved qualification. Their evidence remains in place.
 
-The most recent UI/account work is unaccepted, uncommitted WIP. A257-test run passed before later presentation edits; local browser account creation, upload, worker import, dashboard/drilldown/search and review rendering were observed. Final correction/revert and narrow-screen verification were interrupted. None of this establishes actual-phone or deployed UI acceptance. Preserve the work and audit it under tasks01–04; no implementation resumes merely because these files exist.
+Historical baseline at backlog publication: the UI/account work was unaccepted,
+uncommitted WIP with257tests. Tasks01–04 have since audited and accepted the local
+surface; see the active ticket index and release ledger for current evidence.
+This old baseline is not the current execution frontier. Actual-phone,
+target-host, model and final release acceptance remain open.
