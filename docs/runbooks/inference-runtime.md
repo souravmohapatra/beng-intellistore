@@ -31,8 +31,9 @@ Ollama service on `11434`.
 
 ## 2. Pull and pin candidates
 
-At most two candidates are allowed. Both are permissively licensed and small
-enough for an 8 GB GPU at Q4 quantization:
+At most two candidates are allowed. These are candidates, not qualified models:
+license identity is recorded below, but memory fit, throughput and structured
+response quality must be measured on the laptop before enablement.
 
 ```bash
 docker compose -f compose.inference.yaml exec inference ollama pull qwen2.5:7b-instruct
@@ -73,10 +74,12 @@ sudoedit /etc/beng-intellistore-worker/runtime.env
 ```
 INFERENCE_URL=http://127.0.0.1:11435
 INFERENCE_MODEL=qwen2.5:7b-instruct
+INFERENCE_PROMPT_VERSION=v1
 INFERENCE_ENABLED=false
 INFERENCE_TIMEOUT_SECONDS=10
 INFERENCE_MAX_ATTEMPTS=2
 INFERENCE_RETRY_DELAY_SECONDS=2
+ADVICE_MAX_ROWS=25
 ```
 
 `INFERENCE_ENABLED=false` keeps suggestions off during ordinary processing: a URL
@@ -85,10 +88,13 @@ worker container uses host networking, so `127.0.0.1` reaches the service. Run t
 explicit connectivity check:
 
 ```bash
-sudo systemctl restart intellistore-worker.service
-sudo docker compose --env-file /dev/null   --project-directory "$INTELLISTORE_COMPOSE_DIR" \
-  -f "$INTELLISTORE_COMPOSE_DIR/compose.worker.yaml" \
-  run --rm worker --check-inference
+sudo bash -c '
+  set -a; . /etc/beng-intellistore-worker/runtime.env; set +a
+  exec docker --host="$DOCKER_HOST" compose --env-file /dev/null \
+    --project-directory "$INTELLISTORE_COMPOSE_DIR" \
+    -f "$INTELLISTORE_COMPOSE_DIR/compose.worker.yaml" \
+    run --rm worker --check-inference
+'
 ```
 
 Expect JSON with a classification, model and prompt version. This request uses a
@@ -101,44 +107,88 @@ Prepare at least 50 privately labelled ambiguous cases outside Git (see
 `scripts/advice_benchmark.py --help`). Keep labels independent of the model. The
 benchmark talks to the runtime directly; ordinary advice stays disabled.
 
+The quality and timing gates are reported separately, and the command exits
+non-zero until both pass. Timing needs its own warm workload of at least 100
+unresolved items (`--warm-cases`), so a cold model load or the labelled quality
+run is never counted as warm throughput. Load the model first (step 3) before
+starting the warm run.
+
 ```bash
-python scripts/advice_benchmark.py \
-  --cases ~/private/advice-heldout.json \
-  --url http://127.0.0.1:11435 \
-  --model qwen2.5:7b-instruct \
-  --output ~/private/advice-report.json
+# Replace /path/to/private-evaluation with the private label/report directory.
+# It must be accessible and writable by the configured worker uid/gid.
+sudo bash -c '
+  set -a; . /etc/beng-intellistore-worker/runtime.env; set +a
+  exec docker --host="$DOCKER_HOST" compose --env-file /dev/null \
+    --project-directory "$INTELLISTORE_COMPOSE_DIR" \
+    -f "$INTELLISTORE_COMPOSE_DIR/compose.worker.yaml" \
+    run --rm --entrypoint python \
+    --volume /path/to/private-evaluation:/evaluation worker \
+    scripts/advice_benchmark.py \
+    --cases /evaluation/advice-heldout.json \
+    --warm-cases /evaluation/advice-warm-100.json \
+    --url http://127.0.0.1:11435 \
+    --model qwen2.5:7b-instruct \
+    --prompt-version v1 \
+    --output /evaluation/advice-report.json
+'
 ```
 
-Accept a candidate only when the script reports `meets_gates: true`
-(≥90% correct among non-abstained suggestions, ≥50% coverage, ≥50 cases) and a
-100-item warm run finishes within ten minutes. Otherwise keep
+`--prompt-version` defaults to `INFERENCE_PROMPT_VERSION`, so the benchmark
+matches the version production suggestions will record; pass it explicitly to
+evaluate a different prompt. Accept a candidate only when the script reports
+`meets_gates: true`, meaning
+`meets_quality_gate: true` (≥90% correct among non-abstained suggestions, ≥50%
+coverage, ≥50 cases) **and** `meets_time_gate: true` (≥100 warm items actually
+processed with no failures within ten minutes; failed items are not counted as
+throughput). The process exit code is 0 only when both gates pass. Otherwise keep
 `INFERENCE_ENABLED=false`, use manual review and report the result for an
 explicit scope decision.
 
 ## 6. Enable ordinary advice only after a recorded pass
 
-Only after task08 is recorded as passed, set in the worker environment:
+Only after task08 is recorded as passed, set the flag on **both machines**:
+`/etc/beng-intellistore/runtime.env` on the mini-PC and
+`/etc/beng-intellistore-worker/runtime.env` on the laptop. Use `sudoedit`; never
+print the files because they contain credentials.
 
 ```
 INFERENCE_ENABLED=true
 ```
 
-Then restart only the worker and confirm a review item shows a source-linked
-suggestion that changes nothing until accepted:
+Restart each service on its own machine, so Compose recreates the containers
+with the updated environment. The app enables the request UI; the worker enables
+inference. Enabling only one is not a complete cutover.
 
 ```bash
+# On beng-mini-pc:
+sudo systemctl restart intellistore-app.service
+# On beng-laptop:
 sudo systemctl restart intellistore-worker.service
 sudo journalctl -u intellistore-worker.service -n 50 --no-pager
 ```
 
-A failed attempt is retried up to `INFERENCE_MAX_ATTEMPTS` and is visible on the
-review page. Advice never re-imports the statement.
+Then request advice on an unresolved review item and verify the source-linked
+suggestion changes nothing until explicitly accepted.
+
+A failed attempt is retried up to `INFERENCE_MAX_ATTEMPTS` (hard-capped at 2)
+and is visible on the review page. Every attempt renews the job lease before
+calling the model, and the request timeout is capped by the remaining lease
+(and by `INFERENCE_TIMEOUT_SECONDS`, whichever is smaller); a retry delay that
+cannot fit the remaining lease is skipped, and `INFERENCE_RETRY_DELAY_SECONDS`
+is capped at 10 s. Independent advice requests use their own claim lease the
+same way. A slow or timing-out row therefore cannot outlive the lease, and at
+most `ADVICE_MAX_ROWS` unresolved rows are advised per import. Advice never
+re-imports the statement.
 
 ## 7. Rollback
 
+Set `INFERENCE_ENABLED=false` using `sudoedit` in **both** runtime files, then
+restart the corresponding services on their respective machines:
+
 ```bash
-sudo sed -i 's/^INFERENCE_ENABLED=.*/INFERENCE_ENABLED=false/' \
-  /etc/beng-intellistore-worker/runtime.env
+# On beng-mini-pc:
+sudo systemctl restart intellistore-app.service
+# On beng-laptop:
 sudo systemctl restart intellistore-worker.service
 docker compose -f compose.inference.yaml stop
 ```

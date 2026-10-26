@@ -58,9 +58,12 @@ Evidence:
   invented classification, invalid advice results and missing fields; none
   re-run the financial import. Logs contain no description, amount or source
   text.
-- Test-infrastructure note: live-server worker tests intermittently deadlocked
-  during PostgreSQL flush; a bounded flush retry after closing stale connections
-  now keeps the suite deterministic (six consecutive green runs).
+- Automatic per-row advice is capped at two attempts and25rows per import;
+  every attempt renews the lease and caps the request timeout by its remaining
+  duration (5s safety margin). Malformed optional configuration falls back safely.
+- The broad live-server flush-retry workaround was removed. The polling test now
+  waits for the final empty claim before terminating the subprocess; the clean
+ 377-test smoke passes without suppressing teardown errors.
 
 Implementation commits: `0a8b173`, `17cf8da`, `0a4e747`. Real timeout behaviour
 against the actual GPU runtime remains part of tasks05/08.

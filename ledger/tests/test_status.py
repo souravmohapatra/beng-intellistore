@@ -3,11 +3,12 @@
 import json
 import tempfile
 from pathlib import Path
+from datetime import datetime, UTC
 
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from jobs.models import AdviceRequest, Job
+from jobs.models import AdviceRequest, Job, JobAttempt, JobResult, WorkerCredential
 from ledger.models import Transaction, Upload
 from ledger.tests.fixtures import text_pdf
 from ledger.tests.support import UploadSetupMixin
@@ -39,6 +40,31 @@ class StatusPageTests(UploadSetupMixin, TestCase):
         self.assertContains(response, "No completed processing yet")
         self.assertContains(response, "No suggestion recorded")
         self.assertNotContains(response, "All systems normal")
+
+    def test_last_completed_uses_result_time_not_upload_order(self):
+        credential, _ = WorkerCredential.issue("status-worker")
+        for filename, completed_at in (
+            ("older-upload.pdf", datetime(2026, 1, 3, 12, tzinfo=UTC)),
+            ("newer-upload.pdf", datetime(2026, 1, 2, 12, tzinfo=UTC)),
+        ):
+            self.upload(text_pdf(), filename=filename)
+            job = Job.objects.get(upload__filename=filename)
+            job.status = Job.Status.COMPLETED
+            job.save(update_fields=["status"])
+            attempt = JobAttempt.objects.create(
+                job=job, number=1, credential=credential, finished_at=completed_at
+            )
+            result = JobResult.objects.create(
+                attempt=attempt, version=1, outcome="unsupported",
+                payload={}, payload_sha256="0" * 64,
+            )
+            JobResult.objects.filter(pk=result.pk).update(applied_at=completed_at)
+
+        response = self.client.get(reverse("ledger:status"))
+
+        self.assertContains(response, "older-upload.pdf")
+        self.assertContains(response, "2026-01-03 12:00")
+        self.assertNotContains(response, "newer-upload.pdf")
 
     def test_failed_backup_and_advice_are_visible_with_next_action(self):
         self.status_file.parent.mkdir(parents=True, exist_ok=True)

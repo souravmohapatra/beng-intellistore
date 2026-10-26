@@ -214,29 +214,6 @@ class WorkerAdviceTests(TestCase):
         self.assertEqual(worker.submitted[1]["outcome"], "failed")
         self.assertEqual(worker.submitted[1]["failure"], "TypeError")
 
-    def test_build_result_attaches_suggestions_to_their_section(self):
-        parsed = FakeParsed()
-        claim = {"result_version": 1, "attempt": 7}
-        advices = {
-            "lloyds_current": [
-                {
-                    "page": 1,
-                    "row": 2,
-                    "version": 1,
-                    "classification": "transfer",
-                    "confidence": 0.8,
-                    "explanation": "Looks like a transfer.",
-                    "model": "fake-model",
-                    "prompt_version": "v1",
-                }
-            ]
-        }
-
-        result = build_result(claim, parsed, advices)
-
-        self.assertEqual(
-            result["sections"][0]["suggestions"], advices["lloyds_current"]
-        )
 
 
 class AdvicePublicationTests(UploadSetupMixin, TestCase):

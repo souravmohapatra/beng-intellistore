@@ -44,11 +44,12 @@ Follow [common completion rules](../spec.md#completion-rules): TDD for changed p
 Harness and gates are implemented; qualification requires private labels and the
 actual laptop.
 
-- Evaluation harness enforces the 50-case/90%/50% gates and reports per-class
-  failures, abstentions, baseline and timings; seeder/latency harnesses are
-  separate (task15).
-- Enablement defaults off and requires an explicit flag, so a configured URL does
-  not surface unqualified advice. Unit tests cover disabled/enabled/forced modes.
+- Quality enforces50held-out cases,90% correctness and50% coverage. A separate
+  warm workload must complete100items with no errors within600s; quality alone,
+  slow throughput or100fast-failing requests cannot yield a passing CLI exit.
+- Enablement defaults off in both app and worker. The app suppresses/rejects
+  requests while disabled; the worker needs both URL and flag. The runbook
+  enables and rolls back both machines only after a recorded qualification pass.
 - No candidate has been downloaded, run or evaluated; no quality claim is made.
   Follow step5–6 of `docs/runbooks/inference-runtime.md` and record the report
   before enabling.

@@ -548,6 +548,22 @@ def advice_result(request, pk):
         ):
             return JsonResponse({"error": "advice lease lost"}, status=409)
 
+        # Source facts on a Transaction are immutable. Its correction history
+        # supplies the review revision: advice belongs to the state at claim,
+        # not to a later confirmation or revert.
+        review_changed = advice_request.transaction.corrections.filter(
+            Q(reverted_at__isnull=True)
+            | Q(created_at__gte=advice_request.claimed_at)
+            | Q(reverted_at__gte=advice_request.claimed_at)
+        ).exists()
+        if review_changed:
+            advice_request.status = AdviceRequest.Status.COMPLETED
+            advice_request.last_failure = (
+                "Review changed while advice was running; stale advice was discarded."
+            )
+            _release_advice_claim(advice_request)
+            return JsonResponse({"status": advice_request.status})
+
         if outcome == "failed":
             _release_advice_claim(
                 advice_request,

@@ -13,7 +13,12 @@ from typing import Any, Protocol
 
 class SuggestingClient(Protocol):
     def suggest_classification(
-        self, *, description: str, amount_pence: int, account_kind: str
+        self,
+        *,
+        description: str,
+        amount_pence: int,
+        account_kind: str,
+        prompt_version: str | None = None,
     ) -> Any: ...
 
 
@@ -71,6 +76,42 @@ class BenchmarkReport:
                 }
                 for case in self.cases
             ],
+        }
+
+
+@dataclass
+class WarmRun:
+    """Timing-only result for a warm unresolved-item workload.
+
+    Warm items are timed separately from the labelled quality cases so a slow
+    cold model load or an unrelated quality run can never be counted as warm
+    throughput evidence.
+    """
+
+    total: int = 0
+    errors: int = 0
+    durations_ms: list[float] = field(default_factory=list)
+
+    @property
+    def completed(self) -> int:
+        """Items the runtime actually processed (never negative)."""
+        return max(0, self.total - self.errors)
+
+    @property
+    def total_seconds(self) -> float:
+        return sum(self.durations_ms) / 1000.0
+
+    def as_dict(self) -> dict[str, Any]:
+        durations = sorted(self.durations_ms)
+        return {
+            "total": self.total,
+            "completed": self.completed,
+            "errors": self.errors,
+            "median_ms": durations[len(durations) // 2] if durations else None,
+            "p95_ms": durations[min(len(durations) - 1, int(len(durations) * 0.95))]
+            if durations
+            else None,
+            "total_seconds": round(self.total_seconds, 2),
         }
 
 
@@ -142,7 +183,31 @@ def evaluate(
     return report
 
 
-def meets_gates(report: BenchmarkReport, minimum_cases: int = 50) -> bool:
+def measure_warm(
+    cases: list[dict], client: SuggestingClient, prompt_version: str = "v1"
+) -> WarmRun:
+    """Time a warm workload of unresolved items; no labels are required.
+
+    Failures are counted, never hidden, but do not abort the run: the timing
+    gate measures wall time for the whole workload, exactly as acceptance does.
+    """
+    run = WarmRun(total=len(cases))
+    for case in cases:
+        started = time.perf_counter()
+        try:
+            client.suggest_classification(
+                description=str(case["description"]),
+                amount_pence=int(case["amount_pence"]),
+                account_kind=str(case.get("account_kind", "current")),
+                prompt_version=prompt_version,
+            )
+        except Exception:  # bounded failure is counted, not hidden
+            run.errors += 1
+        run.durations_ms.append((time.perf_counter() - started) * 1000)
+    return run
+
+
+def meets_quality_gate(report: BenchmarkReport, minimum_cases: int = 50) -> bool:
     """Apply the approved quality/coverage bar, not a fit/resource claim."""
     return (
         report.total >= minimum_cases
@@ -153,6 +218,42 @@ def meets_gates(report: BenchmarkReport, minimum_cases: int = 50) -> bool:
     )
 
 
-def meets_time_gate(report: BenchmarkReport, maximum_seconds: float = 600.0) -> bool:
-    """Warm workload gate: the measured run must finish inside the budget."""
-    return report.total > 0 and sum(report.durations_ms) / 1000 <= maximum_seconds
+def meets_time_gate(
+    run: WarmRun, minimum_items: int = 100, maximum_seconds: float = 600.0
+) -> bool:
+    """Warm workload gate: `minimum_items` completed items inside the budget.
+
+    The approved target is 100 unresolved items within ten minutes of warm
+    inference. A shorter, cold, or partly failing run can never satisfy it:
+    items that raised are not throughput, so `errors` must be zero and the
+    successfully processed `completed` count must reach the minimum.
+    """
+    return (
+        run.errors == 0
+        and run.completed >= minimum_items
+        and run.total_seconds <= maximum_seconds
+    )
+
+
+def qualify(
+    quality_report: BenchmarkReport,
+    warm_run: WarmRun | None = None,
+    *,
+    minimum_cases: int = 50,
+    warm_minimum_items: int = 100,
+    warm_maximum_seconds: float = 600.0,
+) -> dict[str, bool]:
+    """Report the quality and timing gates separately, plus their conjunction.
+
+    A missing warm workload means the timing gate has not been demonstrated, so
+    the combined gate stays false rather than silently passing on quality alone.
+    """
+    quality = meets_quality_gate(quality_report, minimum_cases)
+    timing = warm_run is not None and meets_time_gate(
+        warm_run, warm_minimum_items, warm_maximum_seconds
+    )
+    return {
+        "meets_quality_gate": quality,
+        "meets_time_gate": timing,
+        "meets_gates": quality and timing,
+    }

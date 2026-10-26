@@ -70,5 +70,13 @@ Verification:
 - Malformed advice, unknown classification, out-of-range confidence and unknown
   source rows produced no suggestion while the import still succeeded.
 - Actual model quality/fit is not claimed; enablement stays gated by task08.
+- Source binding: immutable transaction facts retain original/page/row provenance.
+  Advice claims bind review state at `claimed_at`; a confirmed correction or a
+  correction/revert since the claim discards the result. Confirmation locks the
+  transaction and rejects advice superseded by any newer correction/revert.
+  Existing confirmed corrections cannot be replaced by a suggestion.
+- Disabled advice has no request control and POSTs are rejected until the app
+  flag is enabled. Enablement and rollback require both app and worker flags;
+  see the runtime runbook. Local377-test smoke and independent review pass.
 
 Implementation commits: `0a8b173` (application integration), `17cf8da` (evaluation harness/runbook). No deployment or push.

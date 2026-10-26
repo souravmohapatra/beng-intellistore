@@ -2,38 +2,14 @@
 
 import shutil
 import tempfile
-import time
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.management.base import CommandError
-from django.db import OperationalError, connections
-from django.test import LiveServerTestCase, override_settings
+from django.test import override_settings
 from django.urls import reverse
 
 from ledger.models import Account, AccountKind
-
-
-class RetryingLiveServerTestCase(LiveServerTestCase):
-    """Live server tests whose subprocess clients can briefly hold DB locks.
-
-    PostgreSQL can report a deadlock while flushing between these tests if a
-    finishing HTTP request still holds a relation lock. Retrying the flush after
-    closing this thread's connection is safe and avoids a flaky suite; genuine
-    flush failures still surface after the bounded attempts.
-    """
-
-    def _fixture_teardown(self):
-        last_error = None
-        for attempt in range(6):
-            try:
-                return super()._fixture_teardown()
-            except (OperationalError, CommandError) as exc:
-                last_error = exc
-                connections.close_all()
-                time.sleep(0.25 * (attempt + 1))
-        raise last_error
 
 
 class UploadSetupMixin:

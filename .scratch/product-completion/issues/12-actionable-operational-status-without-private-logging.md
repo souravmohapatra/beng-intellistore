@@ -47,10 +47,14 @@ Implementation:
 - Ordinary browsing never calls the laptop or NAS; the page reflects stored state.
 
 Verification:
-- `ledger.tests.test_status`: 5 tests covering login, absent backup, corrupt file,
-  failure next-actions and successful generation display.
+- `ledger.tests.test_status`:8tests covering login, absent/corrupt files,
+  failed-attempt/last-success separation, recovery-window warnings, and actual
+  result-completion ordering (not upload ID order).
 - Real browser: status page showed current counts, last imported upload, last
   suggestion provenance and an honest "No backup outcome recorded";390px no overflow.
 - The backup status writer is exercised by the real container proof in task10.
+- Browser verified disabled-advice notice, no misleading request controls, and
+  last-processing timestamp. Backup attempt and last successful generation remain
+  separate after a real read-only-destination failure.
 
 No deployment or push. Real NAS success/failure appears once the user runs task10.

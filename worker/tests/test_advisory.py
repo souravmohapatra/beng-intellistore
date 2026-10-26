@@ -196,7 +196,259 @@ class LocalInferenceClientTests(SimpleTestCase):
             self.assertIsNone(client_from_env())
             self.assertIsNotNone(client_from_env(force=True))
 
+    def test_configured_prompt_version_is_used_for_production_provenance(self):
+        import os
+        from unittest import mock
+
+        from worker.advisory import client_from_env
+
+        body = json.dumps(
+            {
+                "response": json.dumps(
+                    {
+                        "classification": "spending",
+                        "confidence": 0.7,
+                        "explanation": "Looks like a shop purchase.",
+                    }
+                )
+            }
+        ).encode()
+        with mock.patch.dict(
+            os.environ,
+            {
+                "INFERENCE_URL": "http://127.0.0.1:11435",
+                "INFERENCE_ENABLED": "true",
+                "INFERENCE_PROMPT_VERSION": "v9",
+            },
+            clear=False,
+        ):
+            client = client_from_env()
+            self.assertEqual(client.prompt_version, "v9")
+            with self.mock_urlopen(body):
+                suggestion = client.suggest_classification(
+                    "SHOP", -100, "current"
+                )
+        self.assertEqual(suggestion.prompt_version, "v9")
+
+    def test_malformed_optional_timeout_does_not_break_client_construction(self):
+        import os
+        from unittest import mock
+
+        from worker.advisory import client_from_env
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "INFERENCE_URL": "http://127.0.0.1:11435",
+                "INFERENCE_ENABLED": "true",
+                "INFERENCE_TIMEOUT_SECONDS": "not-a-number",
+                "INFERENCE_PROMPT_VERSION": "",
+            },
+            clear=False,
+        ):
+            client = client_from_env()
+        self.assertIsNotNone(client)
+        self.assertEqual(client.timeout_seconds, 10.0)
+        self.assertEqual(client.prompt_version, "v1")
+
+    def test_direct_suggestion_uses_configured_prompt_version(self):
+        client = LocalInferenceClient(
+            "http://127.0.0.1:11434",
+            model="qwen2.5:3b-instruct",
+            timeout_seconds=2.0,
+            prompt_version="v9",
+        )
+        body = json.dumps(
+            {
+                "response": json.dumps(
+                    {
+                        "classification": "spending",
+                        "confidence": 0.6,
+                        "explanation": "Looks like a purchase.",
+                    }
+                )
+            }
+        ).encode()
+        with self.mock_urlopen(body):
+            suggestion = client.suggest_classification("SHOP", -100, "current")
+        self.assertEqual(suggestion.prompt_version, "v9")
+
+    def _ok_body(self):
+        return json.dumps(
+            {
+                "response": json.dumps(
+                    {
+                        "classification": "spending",
+                        "confidence": 0.6,
+                        "explanation": "Looks like a purchase.",
+                    }
+                )
+            }
+        ).encode()
+
+    def test_request_timeout_is_capped_by_remaining_lease(self):
+        response = mock.MagicMock()
+        response.status = 200
+        response.read.return_value = self._ok_body()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=False)
+        with mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
+            self.client.suggest_classification(
+                "SHOP", -100, "current", timeout_seconds=1.0
+            )
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 1.0)
+
+    def test_generous_lease_cap_does_not_extend_configured_timeout(self):
+        response = mock.MagicMock()
+        response.status = 200
+        response.read.return_value = self._ok_body()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=False)
+        with mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
+            self.client.suggest_classification(
+                "SHOP", -100, "current", timeout_seconds=300.0
+            )
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 2.0)
+
+    def test_no_lease_time_raises_before_calling_the_model(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            with self.assertRaisesRegex(AdvisoryUnavailableError, "No time remains"):
+                self.client.suggest_classification(
+                    "SHOP", -100, "current", timeout_seconds=0.0
+                )
+        urlopen.assert_not_called()
+
     def test_http_error_status_is_unavailable(self):
         with self.mock_urlopen(b"{}", status=500):
             with self.assertRaisesRegex(AdvisoryUnavailableError, "HTTP error 500"):
                 self.client.suggest_classification("SHOP", -100, "current")
+
+
+class _AdviceRow:
+    transaction_type = "Others"
+    description = "TO SOMEONE"
+    amount_pence = -500
+    page = 1
+    row = 2
+
+
+class _AdviceParsed:
+    reconciled = True
+    section_name = "lloyds_current"
+    account_kind_hint = "current"
+    savings = None
+
+    def __init__(self):
+        self.rows = [_AdviceRow()]
+
+
+class CollectAdviceDeadlineTests(SimpleTestCase):
+    """Bounded automatic advice keeps within the heartbeat lease."""
+
+    def suggestion(self):
+        return AdvisorySuggestion(
+            version=1,
+            classification=AdvisoryClassification.TRANSFER,
+            confidence=0.8,
+            explanation="Transfer.",
+            model="m",
+            prompt_version="v1",
+        )
+
+    def test_request_timeout_is_capped_and_lease_renewed(self):
+        import datetime as dt
+
+        from worker.advisory import collect_advice
+
+        calls = []
+        progress = []
+        result = self.suggestion()
+
+        class Client:
+            def suggest_classification(self, **kwargs):
+                calls.append(kwargs)
+                return result
+
+        expiry = (
+            dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=60)
+        ).isoformat()
+        collect_advice(
+            _AdviceParsed(),
+            Client(),
+            max_attempts=1,
+            retry_delay_seconds=0,
+            on_progress=lambda: progress.append(True) or expiry,
+        )
+
+        self.assertEqual(len(progress), 1)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("timeout_seconds", calls[0])
+        self.assertGreater(calls[0]["timeout_seconds"], 0.0)
+        self.assertLessEqual(calls[0]["timeout_seconds"], 55.0)
+
+    def test_expired_lease_skips_the_model_call(self):
+        import datetime as dt
+
+        from worker.advisory import collect_advice
+
+        calls = []
+
+        class Client:
+            def suggest_classification(self, **kwargs):
+                calls.append(kwargs)
+                return None
+
+        expired = (
+            dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=1)
+        ).isoformat()
+        advices = collect_advice(
+            _AdviceParsed(),
+            Client(),
+            max_attempts=2,
+            retry_delay_seconds=0,
+            on_progress=lambda: expired,
+        )
+
+        self.assertEqual(calls, [])
+        self.assertEqual(advices, {"lloyds_current": []})
+
+    def test_retry_delay_that_cannot_fit_the_lease_is_skipped(self):
+        import datetime as dt
+
+        from worker.advisory import collect_advice
+
+        calls = []
+
+        class Client:
+            def suggest_classification(self, **kwargs):
+                calls.append(kwargs)
+                raise RuntimeError("down")
+
+        soon = (
+            dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=6)
+        ).isoformat()
+        collect_advice(
+            _AdviceParsed(),
+            Client(),
+            max_attempts=2,
+            retry_delay_seconds=2.0,
+            on_progress=lambda: soon,
+        )
+
+        self.assertEqual(len(calls), 1)
+
+    def test_automatic_attempts_are_capped_regardless_of_config(self):
+        from worker.advisory import AUTOMATIC_ADVICE_MAX_ATTEMPTS, collect_advice
+
+        calls = []
+
+        class Client:
+            def suggest_classification(self, **kwargs):
+                calls.append(kwargs)
+                raise RuntimeError("down")
+
+        collect_advice(
+            _AdviceParsed(), Client(), max_attempts=99, retry_delay_seconds=0
+        )
+
+        self.assertEqual(len(calls), AUTOMATIC_ADVICE_MAX_ATTEMPTS)

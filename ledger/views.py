@@ -8,6 +8,7 @@ from django.db import transaction as transaction_db
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
+from django.db.models import F, Max, Q
 from django.core.paginator import Paginator
 from django.http import FileResponse, Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
@@ -264,11 +265,28 @@ class ReviewDetailView(LoginRequiredMixin, View):
         )
         action = request.POST.get("action")
         if action == "request_advice":
+            if not settings.INFERENCE_ENABLED:
+                return self._render(
+                    request,
+                    pk,
+                    error=(
+                        "Local advice is disabled until the model qualification "
+                        "gate passes."
+                    ),
+                    status=400,
+                )
             if classify_source(transaction) is not None:
                 return self._render(
                     request,
                     pk,
                     error="Deterministic evidence already resolves this row.",
+                    status=400,
+                )
+            if transaction.corrections.filter(reverted_at__isnull=True).exists():
+                return self._render(
+                    request,
+                    pk,
+                    error="A confirmed correction already resolves this row.",
                     status=400,
                 )
             if transaction.suggestions.filter(
@@ -350,8 +368,9 @@ class ReviewDetailView(LoginRequiredMixin, View):
                         request, pk, error="That suggestion was already resolved.", status=400
                     )
                 newer_correction = locked_transaction.corrections.filter(
-                    reverted_at__isnull=True,
-                    created_at__gt=locked.created_at,
+                    Q(reverted_at__isnull=True)
+                    | Q(created_at__gte=locked.created_at)
+                    | Q(reverted_at__gte=locked.created_at)
                 )
                 if newer_correction.exists():
                     return self._render(
@@ -619,6 +638,7 @@ class ReviewDetailView(LoginRequiredMixin, View):
                 "active_correction": active,
                 "suggestion": suggestion,
                 "advice_request": advice_request,
+                "advice_enabled": settings.INFERENCE_ENABLED,
                 "machine_unresolved": machine_effect is None,
                 "machine_effect": _describe_effect(machine_effect),
                 "options": options,
@@ -819,8 +839,10 @@ class SystemStatusView(LoginRequiredMixin, TemplateView):
                 "processing_jobs": jobs.filter(status=Job.Status.PROCESSING).count(),
                 "failed_jobs": jobs.filter(status=Job.Status.FAILED).count(),
                 "last_completed_job": jobs.filter(status=Job.Status.COMPLETED)
-                .order_by("-pk")
+                .annotate(completed_at=Max("attempts__result__applied_at"))
+                .order_by(F("completed_at").desc(nulls_last=True), "-pk")
                 .first(),
+                "advice_enabled": settings.INFERENCE_ENABLED,
                 "advice_pending": advice.filter(
                     status=AdviceRequest.Status.PENDING
                 ).count(),

@@ -17,7 +17,7 @@
       <dt>Processing</dt><dd>{{ processing_jobs }} upload(s)</dd>
       <dt>Failed</dt><dd>{{ failed_jobs }} upload(s)</dd>
       <dt>Last completed</dt>
-      <dd>{% if last_completed_job %}{{ last_completed_job.upload.filename }} ({{ last_completed_job.upload.status }}){% else %}No completed processing yet.{% endif %}</dd>
+      <dd>{% if last_completed_job %}{{ last_completed_job.upload.filename }} ({{ last_completed_job.upload.status }}) — {{ last_completed_job.completed_at|date:"Y-m-d H:i"|default:"time unknown" }}{% else %}No completed processing yet.{% endif %}</dd>
     </dl>
     {% if failed_jobs %}
       <div class="notice notice-error" role="alert">
@@ -29,6 +29,9 @@
 
   <section class="panel stack" aria-labelledby="advice-heading">
     <h2 id="advice-heading">Local advice</h2>
+    {% if not advice_enabled %}
+      <p class="notice notice-warning">Local advice is disabled until model qualification passes. Any waiting requests will not run until it is enabled.</p>
+    {% endif %}
     <dl class="detail-list">
       <dt>Waiting</dt><dd>{{ advice_pending }} request(s)</dd>
       <dt>Processing</dt><dd>{{ advice_processing }} request(s)</dd>

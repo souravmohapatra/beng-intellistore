@@ -3,7 +3,7 @@
 import json
 from datetime import date, timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from django.urls import reverse
 
@@ -18,6 +18,7 @@ from ledger.tests.fixtures import text_pdf
 from ledger.tests.support import UploadSetupMixin
 
 
+@override_settings(INFERENCE_ENABLED=True)
 class AdviceRequestTests(UploadSetupMixin, TestCase):
     def setUp(self):
         super().setUp()
@@ -81,6 +82,35 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(AdviceRequest.objects.count(), 0)
+
+    def test_correction_during_inference_discards_the_stale_suggestion(self):
+        self.request_advice()
+        claimed = self.api("jobs:claim_advice").json()
+        self.client.post(
+            reverse("ledger:review_detail", args=[self.transaction.pk]),
+            {"action": "correct", "classification": "unknown"},
+        )
+
+        result = self.api(
+            "jobs:advice_result",
+            {
+                "claim_token": claimed["claim_token"],
+                "outcome": "suggested",
+                "suggestion": self.suggestion(),
+            },
+            args=[claimed["request"]],
+        )
+
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json()["status"], "completed")
+        review = self.client.get(
+            reverse("ledger:review_detail", args=[self.transaction.pk])
+        )
+        self.assertNotContains(review, "Confirm suggested classification")
+        self.assertContains(review, "Review changed while advice was running")
+        self.assertEqual(
+            Correction.objects.get(reverted_at__isnull=True).classification, "unknown"
+        )
 
     def test_request_is_visible_and_claim_exposes_only_needed_fields(self):
         self.request_advice()
@@ -341,3 +371,44 @@ class AdviceRequestTests(UploadSetupMixin, TestCase):
 
         self.assertEqual(rejected.status_code, 400)
         self.assertEqual(ClassificationSuggestion.objects.count(), 0)
+
+
+class DisabledAdviceTests(UploadSetupMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.upload(text_pdf(), filename="disabled.pdf")
+        self.receipt = Upload.objects.get(filename="disabled.pdf")
+        self.transaction = Transaction.objects.create(
+            account=self.account,
+            upload=self.receipt,
+            posted_on=date(2026, 8, 9),
+            description="TO SOMEONE",
+            transaction_type="Others",
+            amount_pence=-500,
+            balance_pence=None,
+            source_page=1,
+            source_row=1,
+            source_text="09 Aug 26; Description TO SOMEONE; Type Others; Money Out 5.00",
+            needs_review=True,
+        )
+
+    @override_settings(INFERENCE_ENABLED=False)
+    def test_disabled_advice_shows_no_request_action_and_rejects_posts(self):
+        review = self.client.get(
+            reverse("ledger:review_detail", args=[self.transaction.pk])
+        )
+        self.assertContains(review, "disabled until the model qualification gate")
+        self.assertNotContains(review, "Request local advice")
+
+        response = self.client.post(
+            reverse("ledger:review_detail", args=[self.transaction.pk]),
+            {"action": "request_advice"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(
+            response,
+            "disabled until the model qualification gate",
+            status_code=400,
+        )
+        self.assertEqual(AdviceRequest.objects.count(), 0)

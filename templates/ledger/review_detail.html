@@ -94,7 +94,11 @@
             Advice is optional and never changes source facts. It is generated on
             the laptop and can be retried without re-importing the statement.
           </p>
-          {% if advice_request %}
+          {% if not advice_enabled %}
+            <div class="notice notice-warning" role="status">
+              <p>Local advice is disabled until the model qualification gate passes. Resolve this row manually or try again after enablement.</p>
+            </div>
+          {% elif advice_request %}
             {% if advice_request.last_failure %}
               <div class="notice notice-warning" role="alert">
                 <p>Last attempt: {{ advice_request.last_failure }}</p>

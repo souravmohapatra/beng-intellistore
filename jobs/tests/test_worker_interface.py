@@ -8,13 +8,13 @@ import tempfile
 import time
 from pathlib import Path
 
-from django.test import TestCase, TransactionTestCase
+from django.test import LiveServerTestCase, TestCase, TransactionTestCase
 from django.urls import reverse
 
 from jobs.models import Job, JobAttempt, JobResult, WorkerCredential
 from ledger.models import Upload
 from ledger.tests.fixtures import CSV_TEXT
-from ledger.tests.support import RetryingLiveServerTestCase, UploadSetupMixin
+from ledger.tests.support import UploadSetupMixin
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -232,7 +232,7 @@ class RoundTripTests(WorkerTestCase):
         self.assertEqual(wrong_attempt.status_code, 409)
 
 
-class WorkerProcessTests(UploadSetupMixin, RetryingLiveServerTestCase):
+class WorkerProcessTests(UploadSetupMixin, LiveServerTestCase):
     def test_worker_claims_downloads_returns_outcome_and_cleans_temp_files(self):
         self.upload(CSV_TEXT, filename="export.txt")
         upload = Upload.objects.get(filename="export.txt")
@@ -325,7 +325,7 @@ class WorkerProcessTests(UploadSetupMixin, RetryingLiveServerTestCase):
                     sys.executable, "-m", "worker",
                     "--base-url", self.live_server_url,
                     f"--token={token}", "--work-root", work_root,
-                    "--poll-interval", "0.1",
+                    "--poll-interval", "1",
                 ],
                 cwd=BASE_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True,
@@ -353,6 +353,11 @@ class WorkerProcessTests(UploadSetupMixin, RetryingLiveServerTestCase):
                 job.refresh_from_db()
                 self.assertEqual(job.status, Job.Status.COMPLETED)
                 self.assertEqual(list(Path(work_root).iterdir()), [])
+                # A result is printed before the final empty claim. Wait until
+                # that request has returned and the worker is sleeping before
+                # terminating it; otherwise it can race the database flush.
+                self.assertTrue(select.select([process.stdout], [], [], 15)[0])
+                self.assertEqual(process.stdout.readline().strip(), "no work")
             finally:
                 process.terminate()
                 process.communicate(timeout=10)

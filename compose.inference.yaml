@@ -6,8 +6,9 @@
 #
 # Start (on the laptop, after host-change approval):
 #   docker compose -f compose.inference.yaml up -d
-# The worker container reaches it through host networking:
-#   INFERENCE_URL=http://host.docker.internal:11435
+# The worker container uses host networking, so it reaches the loopback-bound
+# service directly:
+#   INFERENCE_URL=http://127.0.0.1:11435
 #
 # The model is pinned by tag and expected digest in model-pin.txt. A tag alone is
 # mutable, so verify the digest after pulling before treating the candidate as

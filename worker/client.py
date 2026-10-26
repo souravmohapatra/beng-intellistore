@@ -6,6 +6,7 @@ directory on completion.
 """
 
 import json
+import math
 import os
 import shutil
 import tempfile
@@ -15,7 +16,7 @@ import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 
-from worker.advisory import collect_advice, client_from_env
+from worker.advisory import collect_advice, remaining_seconds
 
 
 class WorkerError(Exception):
@@ -266,7 +267,7 @@ def process_available(
 ) -> Iterator[dict]:
     """Yield each completed job until no work remains, then become idle."""
     while True:
-        result = process_one(client, work_root)
+        result = process_one(client, work_root, inference)
         if result is None:
             break
         yield result
@@ -282,12 +283,18 @@ def process_advice_requests(client: WorkerClient, inference) -> Iterator[dict]:
             return
         transaction = claim["transaction"]
         token = claim["claim_token"]
+        call = {
+            "description": transaction["description"],
+            "amount_pence": transaction["amount_pence"],
+            "account_kind": transaction["account_kind"],
+        }
+        # Independent advice has its own lease; cap the request so a slow model
+        # cannot outlive it. Unknown expiry keeps the configured timeout.
+        remaining = remaining_seconds(claim.get("lease_expires_at"))
+        if remaining is not None:
+            call["timeout_seconds"] = remaining
         try:
-            suggestion = inference.suggest_classification(
-                description=transaction["description"],
-                amount_pence=transaction["amount_pence"],
-                account_kind=transaction["account_kind"],
-            )
+            suggestion = inference.suggest_classification(**call)
         except Exception as exc:  # report, never crash the worker or import
             submitted = client.submit_advice(
                 claim["request"],
@@ -309,8 +316,38 @@ def process_advice_requests(client: WorkerClient, inference) -> Iterator[dict]:
         yield {"advice_request": claim["request"], **submitted}
 
 
-def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:
-    """Claim and process one job, cleaning temporary files in all cases."""
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    """Read a positive int, falling back on absent/garbage config.
+
+    Advice is optional, so a malformed INFERENCE_* value must never fail a
+    deterministic import.
+    """
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, value)
+
+
+def _env_float(name: str, default: float, minimum: float = 0.0) -> float:
+    try:
+        value = float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(value):
+        return default
+    return max(minimum, value)
+
+
+def process_one(
+    client: WorkerClient, work_root: Path | None, inference=None
+) -> dict | None:
+    """Claim and process one job, cleaning temporary files in all cases.
+
+    `inference` is the already-gated advisory client supplied by the caller
+    (`client_from_env`); None keeps ordinary advice disabled. Passing it in
+    keeps one boring call flow and one enablement decision.
+    """
     cleanup_stale(work_root)
     claim = client.claim()
     if claim is None:
@@ -329,17 +366,18 @@ def process_one(client: WorkerClient, work_root: Path | None) -> dict | None:
         client.heartbeat(claim["job"])
 
         advices = {}
-        inference = client_from_env()
         if inference is not None and parsed is not None:
             advices = collect_advice(
                 parsed,
                 inference,
-                max_attempts=max(1, int(os.environ.get("INFERENCE_MAX_ATTEMPTS", "2"))),
-                retry_delay_seconds=max(
-                    0.0, float(os.environ.get("INFERENCE_RETRY_DELAY_SECONDS", "2"))
+                max_attempts=_env_int("INFERENCE_MAX_ATTEMPTS", 2),
+                retry_delay_seconds=_env_float("INFERENCE_RETRY_DELAY_SECONDS", 2.0),
+                max_rows=_env_int("ADVICE_MAX_ROWS", 25),
+                # Return the renewed expiry so advice requests stay inside the
+                # job lease rather than relying on the configured timeout alone.
+                on_progress=lambda: client.heartbeat(claim["job"]).get(
+                    "lease_expires_at"
                 ),
-                max_rows=max(1, int(os.environ.get("ADVICE_MAX_ROWS", "25"))),
-                on_progress=lambda: client.heartbeat(claim["job"]),
             )
 
         submitted = client.submit_result(
